@@ -11,7 +11,9 @@ _CYCLE_COLS = [
     "cycle_id", "task_id", "phase", "start_t", "end_t", "close_reason", "state", "hs", "hs_reason",
     "hs_conflict", "ru", "ru_reason", "ru_basis", "D", "D_norm", "S", "S_dist", "C", "T", "T_runs",
     "E", "I", "Q", "text_similarity", "mapped_block", "mapping_kind", "intervened", "support_types",
-    "off_task", "idle_gaps", "unknown_reasons", "review", "prompt_event_ids", "rule_version", "config_hash",
+    "off_task", "idle_gaps", "blocked_pastes", "away_count", "away_s", "away_unknown", "burst_typed_max",
+    "interruptions", "interruption_s", "gap_reasons", "contamination_suspected",
+    "unknown_reasons", "review", "prompt_event_ids", "rule_version", "config_hash",
 ]
 _DECISION_COLS = [
     "opportunity_id", "prompt_event_id", "cycle_id", "t", "group", "phase_name", "eligible", "cooldown",

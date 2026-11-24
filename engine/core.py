@@ -47,6 +47,10 @@ class Engine:
         self._support_active = False
         self._cooldown_pending = False
         self._last_intervened_idx = -1   # self.cycles 内の添字（§13-2 案B 用）
+        # v1.2：離脱・復帰直後の打鍵・エディタ内コピー
+        self._away: Optional[tuple[str, float]] = None      # (page_id, 離脱開始の client_t[ms])
+        self._burst: Optional[dict] = None                  # 復帰直後の打鍵の集計中
+        self._clip: Optional[tuple[str, list[str]]] = None  # エディタ内でコピーした (文字列, 由来ラベル列)
 
     # ------------------------------------------------------------ 公開API
     def ingest(self, ev: Event) -> Optional[Decision]:
@@ -149,7 +153,14 @@ class Engine:
 
     def _on_code_edit(self, ev: Event, in_support: bool):
         cid = self.open.cycle_id if self.open else ""
-        origin = edit_origin(ev.payload, cid)
+        origin: "str | list[str]" = edit_origin(ev.payload, cid)
+        src = ev.payload.get("source") or {}
+        ins = ev.payload.get("insert_text", "")
+        if ev.payload.get("kind") == "paste" and src.get("type") == "editor":
+            # エディタ内の貼り付け：コピー元の文字の由来を引き継ぐ（v1.2）
+            origin = list(self._clip[1]) if self._clip is not None and self._clip[0] == ins else f"other@{cid or 'none'}"
+        if ev.payload.get("kind") == "typed" and ins:
+            self._count_burst(ev, len(ins))
         res = self.doc.apply(int(ev.payload.get("offset", -1)), int(ev.payload.get("delete_len", 0)),
                              ev.payload.get("insert_text", ""), origin)
         if not res.ok:
@@ -175,6 +186,90 @@ class Engine:
             if self.open is not None:
                 self.open.gap = True
                 self.open.gap_reasons.append("snapshot_mismatch")
+        return None
+
+    # ------------------------------------------------------------ v1.2 のイベント
+    def _on_copy_in_editor(self, ev: Event, _s: bool):
+        try:
+            off, n = int(ev.payload["offset"]), int(ev.payload["length"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if 0 <= off and off + n <= len(self.doc.chars):
+            self._clip = (self.doc.text[off:off + n], self.doc.origins_for(off, off + n))
+        return None
+
+    def _on_paste_blocked(self, ev: Event, _s: bool):
+        if self.open is not None:
+            self.open.blocked_pastes += 1
+        return None
+
+    def _on_focus_change(self, ev: Event, _s: bool):
+        """離脱（タブ非表示またはフォーカス喪失）と復帰。長さは端末の単調時刻 client_t[ms] で測る。"""
+        p = ev.payload
+        page, ct = p.get("page_id"), p.get("client_t")
+        if not isinstance(ct, (int, float)):
+            return None
+        if p.get("away"):
+            if self._away is None:
+                self._away = (page, float(ct))
+            return None
+        if self._away is None:
+            return None
+        start_page, start_ct = self._away
+        self._away = None
+        if self.open is None:
+            return None
+        self.open.away_count += 1
+        if start_page != page:
+            self.open.away_unknown += 1
+            return None
+        dur = max(0.0, (float(ct) - start_ct) / 1000.0)
+        self.open.away_s += dur
+        if dur >= self.cfg["thresholds"]["contam_min_away_s"]:
+            self._burst = {"page": page, "start": float(ct), "chars": 0}
+        return None
+
+    def _count_burst(self, ev: Event, n: int) -> None:
+        b = self._burst
+        ct = ev.payload.get("client_t")
+        if b is None or not isinstance(ct, (int, float)) or ev.payload.get("page_id") != b["page"]:
+            return
+        if float(ct) - b["start"] > self.cfg["thresholds"]["contam_burst_window_s"] * 1000.0:
+            self._burst = None
+            return
+        b["chars"] += n
+        if self.open is not None:
+            self.open.burst_typed_max = max(self.open.burst_typed_max, b["chars"])
+
+    def _on_client_gap(self, ev: Event, _s: bool):
+        """連番の欠落（v1.2 §2）。そのサイクルの由来系特徴（C・I・E）は Unknown にする。"""
+        if self.open is not None:
+            self.open.gap = True
+            self.open.gap_reasons.append("client_gap")
+        self._anomaly(ev, "client_gap")
+        return None
+
+    def _on_session_resume(self, ev: Event, _s: bool):
+        if self.open is not None:
+            self.open.interruptions += 1
+            try:
+                self.open.interruption_s += float(ev.payload.get("gap_s") or 0.0)
+            except (TypeError, ValueError):
+                pass
+        self._away = None
+        self._burst = None
+        text = ev.payload.get("text")
+        if isinstance(text, str) and text != self.doc.text:
+            self._anomaly(ev, "resume_text_mismatch")
+            self.doc.resync(text)
+            if self.open is not None:
+                self.open.gap = True
+                self.open.gap_reasons.append("resume_text_mismatch")
+        return None
+
+    def _on_phase_end(self, ev: Event, _s: bool):
+        if self.open is not None:
+            self._close(ev.t, "phase_end")
         return None
 
     def _on_run(self, ev: Event, in_support: bool):
@@ -231,6 +326,16 @@ class Engine:
         unknown = list(ru.unknown_reasons)
         if hs.label is None:
             unknown.insert(0, "HS:" + hs.reason)
+        th = self.cfg["thresholds"]
+        aux = {
+            "blocked_pastes": oc.blocked_pastes, "away_count": oc.away_count, "away_s": round(oc.away_s, 1),
+            "away_unknown": oc.away_unknown, "burst_typed_max": oc.burst_typed_max,
+            "interruptions": oc.interruptions, "interruption_s": round(oc.interruption_s, 1),
+            "gap_reasons": list(oc.gap_reasons),
+        }
+        aux["contamination_suspected"] = (oc.blocked_pastes >= th["contam_blocked_pastes_min"]
+                                          or oc.burst_typed_max >= th["contam_burst_chars"])
+        ru.features.update(aux)
         res = CycleResult(
             cycle_id=oc.cycle_id, task_id=oc.task_id, phase=oc.phase, start_t=oc.start_t, end_t=t,
             close_reason=reason, prompt_event_ids=[p.event_id for p in oc.prompts],

@@ -37,6 +37,17 @@ EVENT_TYPES = frozenset({
     "SANDBOX_ERROR",        # {error, image}  実行環境の障害（学習者のコードの誤りではない）
     "CLIENT_INFO",          # 画面側の補助情報（ページ再読込など）
     "MATERIAL_VIEW",        # {material_id, action: open|close, material_version}  教材の閲覧
+    # v1.2
+    "FOCUS_CHANGE",         # {away: bool, reason, page_id, client_t[ms]}  タブ非表示・フォーカス喪失と復帰
+    "PASTE_BLOCKED",        # {length, via}  外部からの貼り付けを遮断（内容は保存しない）
+    "COPY_IN_EDITOR",       # {offset, length, cut}  エディタ内のコピー（貼り付け時に由来を引き継ぐ）
+    "CLIENT_GAP",           # {from_seq, to_seq, waited_s}  連番の欠落（C・I・E を Unknown にする）
+    "SESSION_RESUME",       # {gap_s, text, page_id, over_limit}  中断後の再開
+    "PHASE_START",          # {phase, kind, time_limit_s}
+    "PHASE_END",            # {phase, reason: completed|timeout|admin}
+    "TASK_SUBMIT",          # {code, code_hash, results, passed}  課題の提出と自動採点
+    "CONSENT", "ENV_CHECK", "TEST_ANSWER", "QUESTIONNAIRE_ANSWER", "LIMIT_REACHED",
+    "PARTICIPANT_STOPPED", "SESSION_EXPIRED",
 })
 
 

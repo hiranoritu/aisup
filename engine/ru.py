@@ -262,12 +262,17 @@ def compute_ru(oc: OpenCycle, end_doc: OriginDoc, cfg: dict, analyzer: Structure
             len(oc.runs) >= 1,
         )
         I = None if i_val is None else int(i_val)
-        if I is None:
+        if oc.gap and I is not None:
+            I = None   # v1.2 §2：記録の欠落があるサイクルの由来系特徴（C・I・E）は Unknown
+            unk.append("I:edit_log_gap")
+        elif I is None:
             unk.append("I:undetermined")
         feats["handtyped_ratio"] = None if handtyped is None else round(handtyped, 4)
     else:
-        # 対応付けできない場合、I は「実行0回」なら確定で0
-        I = 0 if len(oc.runs) == 0 else None
+        # 対応付けできない場合、I は「実行0回」なら確定で0（記録の欠落があれば Unknown）
+        I = 0 if len(oc.runs) == 0 and not oc.gap else None
+        if oc.gap:
+            unk.append("I:edit_log_gap")
 
     feats.update({
         "D": None if D is None else round(D, 4),

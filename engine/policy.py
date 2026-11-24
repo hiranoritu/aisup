@@ -27,6 +27,8 @@ def candidate_cell(c: CycleResult, history: list[CycleResult], cfg: dict) -> tup
         return None, "pending"
     if c.off_task:
         return None, "off_task"
+    if pol.get("contamination_policy") == "hold" and c.features.get("contamination_suspected"):
+        return None, "contamination"   # §13-9 案B：学習目標外とみなして保留
     if c.state in ("P-P", "A-P", "C-P"):
         return c.state, "candidate"
     if c.state == "P-A":
@@ -67,6 +69,8 @@ def choose(group: str, window: list[CycleResult], history_before: dict[str, list
         return None, "hold_pending", cells
     if any(r == "off_task" for r in reasons):
         return None, "hold_off_task", cells
+    if any(r == "contamination" for r in reasons):
+        return None, "hold_contamination", cells
     if all(cells):
         return SUPPORT_FOR_CELL[cells[-1]], f"two_candidates_latest={cells[-1]}", cells
     return None, "not_two_candidates:" + ",".join(reasons), cells

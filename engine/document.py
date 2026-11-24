@@ -37,12 +37,16 @@ class OriginDoc:
     def text(self) -> str:
         return "".join(self.chars)
 
-    def apply(self, offset: int, delete_len: int, insert: str, origin: str) -> EditResult:
+    def apply(self, offset: int, delete_len: int, insert: str, origin: "str | list[str]") -> EditResult:
+        """origin は1つのラベル、または挿入文字と同じ長さのラベル列（エディタ内の貼り付けで由来を引き継ぐ）。"""
         n = len(self.chars)
         if offset < 0 or delete_len < 0 or offset + delete_len > n:
             return EditResult(False, f"out_of_range(offset={offset},delete={delete_len},len={n})")
+        labels = [origin] * len(insert) if isinstance(origin, str) else list(origin)
+        if len(labels) != len(insert):
+            return EditResult(False, "origin_length_mismatch")
         self.chars[offset:offset + delete_len] = list(insert)
-        self.origins[offset:offset + delete_len] = [origin] * len(insert)
+        self.origins[offset:offset + delete_len] = labels
         return EditResult(True)
 
     def resync(self, text: str) -> None:

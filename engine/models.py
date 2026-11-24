@@ -55,6 +55,14 @@ class OpenCycle:
     review: list[str] = field(default_factory=list)
     event_ids: list[str] = field(default_factory=list)
     revised_prompt: Optional[str] = None
+    # v1.2：外部AI利用の疑いの補助特徴・中断
+    blocked_pastes: int = 0
+    away_count: int = 0
+    away_s: float = 0.0
+    away_unknown: int = 0          # 離脱中にページが読み直されて長さが分からない離脱
+    burst_typed_max: int = 0       # 離脱から戻った直後の打鍵（挿入文字数）の最大
+    interruptions: int = 0
+    interruption_s: float = 0.0
 
 
 @dataclass

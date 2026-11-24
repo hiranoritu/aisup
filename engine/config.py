@@ -10,7 +10,7 @@ import json
 from typing import Any
 
 DEFAULT_CONFIG: dict[str, Any] = {
-    "rule_version": "v1.1-dev.1",
+    "rule_version": "v1.2-dev.1",
     "thresholds": {
         # RU（仕様 §4）
         "D_active": 0.10,          # D >= これで Active の根拠
@@ -25,6 +25,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         # サイクル（仕様 §2, §13-1 案A）
         "followup_confidence_min": 0.70,
         "idle_seconds": 90,
+        # 外部AI利用の疑い（仕様 v1.2 §15.2。基準は仕様に値がないため実装時の既定値。予備実験で見直す）
+        "contam_blocked_pastes_min": 1,    # サイクル内の PASTE_BLOCKED がこの回数以上
+        "contam_min_away_s": 10,           # この秒数以上のタブ離脱から戻った直後を見る
+        "contam_burst_window_s": 60,       # 復帰からこの秒数以内の
+        "contam_burst_chars": 150,         # 打鍵の挿入文字数がこれ以上
     },
     "policy": {
         "enable_PA": True,   # 予備実験で不成立なら False（非介入化）
@@ -35,6 +40,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         # 判定窓の範囲: "phase"（同じフェーズ内）/ "task"（同じ課題内）
         "window_scope": "phase",
         "support_enabled_phases": ["main"],
+        # §13-9: "flag_only"（案A：記録のみ）/ "hold"（案B：疑いのあるサイクルは学習目標外として適応群の介入を保留）
+        "contamination_policy": "flag_only",
     },
     # 本番は "tree_sitter_c"。"lexer_approx" は開発用の近似（仕様外）。
     "structure_analyzer": "tree_sitter_c",
