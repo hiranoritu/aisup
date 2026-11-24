@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cプログラミング学習環境</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">C 学習環境</div>
+  <div id="task-title" class="task-title">読み込み中…</div>
+  <div id="progress" class="progress"></div>
+</header>
+
+<nav id="materials-bar" class="materials-bar" hidden aria-label="教材">
+  <span class="mb-label">教材</span>
+  <span id="materials-list" class="mb-list"></span>
+</nav>
+<section id="materials-panel" class="materials-panel" hidden aria-labelledby="mp-title">
+  <div class="mp-head">
+    <h2 id="mp-title"></h2>
+    <button id="mp-close" type="button">閉じる</button>
+  </div>
+  <div id="mp-body" class="mp-body"></div>
+</section>
+
+<main id="waiting" class="waiting" hidden>
+  <p id="waiting-msg">開始の合図があるまでお待ちください。</p>
+</main>
+
+<main id="workspace" class="workspace" hidden>
+  <section class="left" id="left">
+    <details class="task" open>
+      <summary>課題</summary>
+      <div id="task-desc" class="task-desc"></div>
+    </details>
+    <div class="editor-wrap">
+      <div class="pane-head"><span>コード（main.c）</span><span id="editor-lock" class="lock" hidden>支援が終わるまで編集できません</span></div>
+      <div class="editor">
+        <pre id="gutter" class="gutter" aria-hidden="true"></pre>
+        <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-label="コードエディタ"></textarea>
+      </div>
+    </div>
+    <div class="runbar">
+      <div class="stdin-box">
+        <label for="stdin">標準入力（実行前に入力）</label>
+        <textarea id="stdin" rows="3" spellcheck="false"></textarea>
+      </div>
+      <button id="run" class="primary">▶ 実行</button>
+    </div>
+    <div class="output-wrap">
+      <div class="pane-head"><span>実行結果</span></div>
+      <pre id="output" class="output" aria-live="polite"></pre>
+    </div>
+
+    <div id="overlay" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="ov-title">
+      <div class="ov-card">
+        <div class="ov-head">
+          <h2 id="ov-title">確認</h2>
+          <span id="ov-timer" class="timer"></span>
+        </div>
+        <div id="ov-body" class="ov-body"></div>
+        <div id="ov-actions" class="ov-actions"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="right">
+    <div class="pane-head"><span>AI チャット</span></div>
+    <div id="chat" class="chat" aria-live="polite"></div>
+    <div id="busy" class="busy" hidden><span class="spinner"></span><span id="busy-msg">AI が回答を作成しています…</span></div>
+    <form id="ask" class="ask">
+      <textarea id="prompt" rows="3" placeholder="AI への質問を書いてください（Ctrl+Enter で送信）"></textarea>
+      <button id="send" class="primary" type="submit">送信</button>
+    </form>
+  </section>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+<script src="/highlight.js"></script>
+<script src="/app.js"></script>
+<script src="/materials.js"></script>
+</body>
+</html>

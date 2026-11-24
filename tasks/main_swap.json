@@ -1,0 +1,27 @@
+{
+  "task_id": "main_swap",
+  "phase": "main",
+  "title": "課題1：2つの変数の値を入れ替える関数",
+  "description": "関数 `swap` を完成させ、main で読み込んだ2つの整数 x, y の値を入れ替えてから表示してください。\n`swap` を呼び出した後、main の x と y の値が実際に入れ替わっている必要があります。\n\n入力例:\n```\n3 5\n```\n出力例:\n```\n5 3\n```",
+  "concepts": [
+    "ポインタ引数",
+    "アドレス演算子 &",
+    "間接参照 *",
+    "値渡しとの違い"
+  ],
+  "target_functions": [
+    "swap",
+    "main"
+  ],
+  "starter_code": "#include <stdio.h>\n\nvoid swap(/* 引数を書く */) {\n    /* ここに書く */\n}\n\nint main(void) {\n    int x, y;\n    scanf(\"%d %d\", &x, &y);\n    /* swap を呼ぶ */\n    printf(\"%d %d\\n\", x, y);\n    return 0;\n}\n",
+  "reference_solution": "#include <stdio.h>\n\nvoid swap(int *a, int *b) {\n    int tmp = *a;\n    *a = *b;\n    *b = tmp;\n}\n\nint main(void) {\n    int x, y;\n    if (scanf(\"%d %d\", &x, &y) != 2) return 1;\n    swap(&x, &y);\n    printf(\"%d %d\\n\", x, y);\n    return 0;\n}\n",
+  "sample_inputs": [
+    "3 5\n",
+    "-1 7\n"
+  ],
+  "variation_seeds": [
+    "3つの変数を巡回させる rotate(int *a, int *b, int *c)",
+    "大きいほうが先に来るように並べる order(int *a, int *b)"
+  ],
+  "placeholder": true
+}

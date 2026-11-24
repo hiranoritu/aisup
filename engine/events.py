@@ -29,6 +29,14 @@ EVENT_TYPES = frozenset({
     "SUPPORT_END",          # {opportunity_id, reason: completed|skipped|aborted|timeout}
     "SUPPORT_INFEASIBLE",   # {opportunity_id, reason}
     "ADOPT_UNCHANGED",      # 明確な無変更採用イベント（UIに採用ボタンを置く場合）
+    # 以下はサーバが記録する監査用イベント。エンジンの判定には影響しない（ハンドラなし）。
+    "SESSION_END",
+    "LLM_CALL",             # {purpose, model, params, prompt_version, messages, text, raw, ok, error, latency_ms}
+    "DECISION",             # 送信時点の介入判断（Decision.to_dict()）。再生でも同じものが出る
+    "AI_ERROR",             # {prompt_event_id, llm_call_id, error}  学習者用AIの応答失敗
+    "SANDBOX_ERROR",        # {error, image}  実行環境の障害（学習者のコードの誤りではない）
+    "CLIENT_INFO",          # 画面側の補助情報（ページ再読込など）
+    "MATERIAL_VIEW",        # {material_id, action: open|close, material_version}  教材の閲覧
 })
 
 

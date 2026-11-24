@@ -1,0 +1,5 @@
+# 本実験の S 特徴は Tree-sitter C の構文木に依存する。文法の版でノード型が変わり得るので固定する。
+# 版を上げるときは tests/test_structure_ts.py を通し、config_hash とは別に版を記録に残すこと。
+tree-sitter==0.27.0
+tree-sitter-c==0.24.2
+pytest==9.2.0

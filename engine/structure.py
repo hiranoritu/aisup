@@ -138,7 +138,7 @@ class TreeSitterAnalyzer:
     """本番用。Tree-sitter C の named node の前順走査系列。
 
     識別子名・コメント・位置情報を除き、ノード型のみを並べる。has_error なら None。
-    ※ この環境では tree_sitter が未導入のため未検証。導入後に tests/test_structure_ts.py を追加して検証すること。
+    検証は tests/test_structure_ts.py（版は requirements.txt で固定）。
     """
 
     name = "tree_sitter_c"

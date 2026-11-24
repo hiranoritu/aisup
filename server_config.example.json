@@ -1,0 +1,9 @@
+{
+  "llm_provider": "openai",
+  "llm": {
+    "chat":     {"model": "<学習者用AIのモデル名>", "params": {}, "timeout_s": 60},
+    "features": {"model": "<特徴抽出のモデル名>", "params": {"temperature": 0}, "timeout_s": 8},
+    "support":  {"model": "<支援問題生成のモデル名>", "params": {"temperature": 0}, "timeout_s": 12},
+    "grade":    {"model": "<記述採点のモデル名>", "params": {"temperature": 0}, "timeout_s": 12}
+  }
+}

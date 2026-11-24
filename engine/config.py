@@ -37,7 +37,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "support_enabled_phases": ["main"],
     },
     # 本番は "tree_sitter_c"。"lexer_approx" は開発用の近似（仕様外）。
-    "structure_analyzer": "lexer_approx",
+    "structure_analyzer": "tree_sitter_c",
 }
 
 

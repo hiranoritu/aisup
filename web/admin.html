@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管理画面 — C 学習環境</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { padding-bottom: 40px; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; }
+  .card h2 { font-size: 16px; margin: 0 0 8px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row input[type=text], .row select { width: auto; font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px; text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .states { font-family: var(--mono); font-size: 12px; }
+  .pill { display: inline-block; padding: 0 6px; border-radius: 10px; font-size: 12px; background: var(--code-bg); }
+  .pill.on { background: #fff1c2; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .detail pre { max-height: 50vh; overflow: auto; background: var(--code-bg); padding: 8px; border-radius: 6px; font: 12px/1.4 var(--mono); }
+  .url { font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<header class="top"><div class="brand">管理画面</div><div id="meta" class="task-title meta"></div></header>
+<div class="wrap">
+  <div class="card" id="login">
+    <h2>管理トークン</h2>
+    <p class="meta">サーバ起動時に環境変数 ADMIN_TOKEN に設定した文字列を入力してください。</p>
+    <form class="row" id="login-form">
+      <input type="password" id="token" placeholder="ADMIN_TOKEN" autocomplete="current-password" style="width:320px">
+      <button class="primary">開く</button>
+    </form>
+  </div>
+
+  <div id="main" hidden>
+    <div class="card">
+      <h2>使い方</h2>
+      <ol class="meta" style="margin:0;padding-left:1.4em">
+        <li>「参加者の登録」で群を選んで登録する（群は学習者には表示されません）。</li>
+        <li>表の「URLをコピー」で学習者URLを取得し、学習者のブラウザで開く。学習者画面は開始まで「お待ちください」と表示されます。</li>
+        <li>「開始」を押すと最初の課題（導入）が始まる。以降は「次の課題へ」で 導入 → 主課題1 → 主課題2 → 後続課題 → 終了 と進みます。支援が出るのは主課題だけです。</li>
+        <li>「判定」で各サイクルの状態（HS×RU）と介入判断を確認できます。終了後は「ログと判定結果をダウンロード」。</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>参加者の登録</h2>
+      <form class="row" id="create">
+        <label>ID <input type="text" id="c-id" placeholder="空欄で自動（P001…）" style="width:180px"></label>
+        <label>群
+          <select id="c-group">
+            <option value="random">無作為に割付</option>
+            <option value="adaptive">適応群</option>
+            <option value="uniform">一律群</option>
+          </select>
+        </label>
+        <label>メモ <input type="text" id="c-note" style="width:200px"></label>
+        <button class="primary">登録</button>
+      </form>
+      <div id="created" class="meta"></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2>参加者</h2>
+        <div class="row">
+          <button id="advance-all">全員を次の課題へ</button>
+          <button id="export">ログと判定結果をダウンロード（zip）</button>
+        </div>
+      </div>
+      <div style="overflow:auto">
+        <table>
+          <thead><tr><th>ID</th><th>群</th><th>課題</th><th class="num">サイクル</th><th class="num">介入</th>
+            <th>状態（完了サイクル）</th><th>支援中</th><th class="num">異常</th><th>学習者URL</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p class="meta">課題の順序: <span id="tasks"></span>。「次の課題へ」で開始・切替・終了します（支援中なら中断として記録）。</p>
+    </div>
+
+    <div class="card detail" id="detail" hidden>
+      <h2 id="detail-title"></h2>
+      <pre id="detail-body"></pre>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script src="/admin.js"></script>
+</body>
+</html>

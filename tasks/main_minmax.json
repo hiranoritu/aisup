@@ -1,0 +1,26 @@
+{
+  "task_id": "main_minmax",
+  "phase": "main",
+  "title": "課題2：配列の最小値と最大値を返す関数",
+  "description": "関数 `min_max` を完成させてください。配列 arr（要素数 n）の最小値を *min に、最大値を *max に入れます。\nmain は n と n 個の整数を読み込み、最小値と最大値を表示します。\n\n入力例:\n```\n5\n3 9 -2 7 4\n```\n出力例:\n```\nmin=-2 max=9\n```",
+  "concepts": [
+    "配列とポインタ",
+    "出力引数（ポインタで結果を返す）",
+    "間接参照 *"
+  ],
+  "target_functions": [
+    "min_max",
+    "main"
+  ],
+  "starter_code": "#include <stdio.h>\n\nvoid min_max(const int *arr, int n, int *min, int *max) {\n    /* ここに書く */\n}\n\nint main(void) {\n    int n;\n    int a[100];\n    int mn, mx;\n    scanf(\"%d\", &n);\n    for (int i = 0; i < n; i++) scanf(\"%d\", &a[i]);\n    /* min_max を呼ぶ */\n    printf(\"min=%d max=%d\\n\", mn, mx);\n    return 0;\n}\n",
+  "reference_solution": "#include <stdio.h>\n\nvoid min_max(const int *arr, int n, int *min, int *max) {\n    *min = arr[0];\n    *max = arr[0];\n    for (int i = 1; i < n; i++) {\n        if (arr[i] < *min) *min = arr[i];\n        if (arr[i] > *max) *max = arr[i];\n    }\n}\n\nint main(void) {\n    int n;\n    int a[100];\n    int mn, mx;\n    if (scanf(\"%d\", &n) != 1 || n < 1 || n > 100) return 1;\n    for (int i = 0; i < n; i++) scanf(\"%d\", &a[i]);\n    min_max(a, n, &mn, &mx);\n    printf(\"min=%d max=%d\\n\", mn, mx);\n    return 0;\n}\n",
+  "sample_inputs": [
+    "5\n3 9 -2 7 4\n",
+    "1\n42\n"
+  ],
+  "variation_seeds": [
+    "合計も *sum で返す",
+    "最大値の添字を *idx で返す"
+  ],
+  "placeholder": true
+}
