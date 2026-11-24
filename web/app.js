@@ -1,20 +1,6 @@
-// 学習者画面。編集・コピー・貼り付けをイベントとしてサーバに送る（仕様 §2）。
-// 由来（AI からの貼り付けか）はサーバが直前の COPY_FROM_AI と照合して決める。
+// 学習者画面の本体（課題フェーズ：エディタ・AIチャット・実行・支援）。通信は net.js、他のフェーズは phases.js。
+// 編集・コピー・貼り付けをイベントとして送る（仕様 §2）。由来はサーバが直前のコピーと照合して決める。
 "use strict";
-
-const TOKEN = new URLSearchParams(location.search).get("t") || "";
-const $ = (id) => document.getElementById(id);
-const el = (tag, attrs = {}, ...kids) => {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === "class") e.className = v;
-    else if (k === "text") e.textContent = v;
-    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
-    else if (v !== false && v != null) e.setAttribute(k, v === true ? "" : v);
-  }
-  for (const c of kids.flat()) if (c != null) e.append(c instanceof Node ? c : document.createTextNode(c));
-  return e;
-};
 
 let S = null;               // サーバの状態
 let version = -1;
@@ -23,73 +9,36 @@ let pendingSel = null;      // beforeinput 時点の選択範囲
 let pendingPaste = null;    // paste イベントのクリップボード文字列
 let timerHandle = null;
 
-// ------------------------------------------------------------------ 通信
-async function api(path, body) {
-  const opt = { headers: { "X-Token": TOKEN } };
-  if (body !== undefined) {
-    opt.method = "POST";
-    opt.headers["Content-Type"] = "application/json";
-    opt.body = JSON.stringify(body);
-  }
-  const r = await fetch(path, opt);
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) { const e = new Error(j.error || r.statusText); e.status = r.status; throw e; }
-  return j;
-}
-
-// 編集イベントは順序を保って送る（送信中は次を待たせる）
-const queue = [];
-let flushing = null;
-function enqueue(type, payload) {
-  queue.push({ type, payload, client_t: Date.now() / 1000 });
-  if (queue.length >= 40) flush();
-}
-function flush() {
-  if (flushing) return flushing.then(() => (queue.length ? flush() : null));
-  if (!queue.length) return Promise.resolve();
-  const batch = queue.splice(0, queue.length);
-  flushing = api("/api/events", { events: batch })
-    .then((r) => { if (r.version !== version) load(); })
-    .catch((e) => { queue.unshift(...batch); toast("通信に失敗しました。再送します。"); throw e; })
-    .finally(() => { flushing = null; });
-  return flushing.catch(() => {});
-}
-setInterval(flush, 400);
-
-function toast(msg) {
-  const t = $("toast");
-  t.textContent = msg;
-  t.hidden = false;
-  clearTimeout(toast._h);
-  toast._h = setTimeout(() => (t.hidden = true), 3000);
-}
-
 // ------------------------------------------------------------------ 状態の反映
 async function load() {
+  if (pageBlocked) return;
   try {
     S = await api("/api/state");
   } catch (e) {
-    $("task-title").textContent = e.status === 403 ? "URL が正しくありません" : "接続できません";
+    if (e.status === 403) $("end-msg").textContent = "URL が正しくありません。メールで届いた URL をそのまま開いてください。";
     return;
   }
   render();
 }
 
+onServerVersion = (v, status) => { if (S && (v !== S.version || status !== S.status)) load(); };
+
 function render() {
-  if (typeof Materials !== "undefined") Materials.render(S.task ? S.materials : []);
-  if (!S.task) {
-    $("workspace").hidden = true;
-    $("waiting").hidden = false;
-    $("waiting-msg").textContent = S.ended ? "すべての課題が終了しました。お疲れさまでした。" : "開始の合図があるまでお待ちください。";
-    $("task-title").textContent = S.ended ? "終了" : "待機中";
-    $("progress").textContent = "";
-    version = S.version;
-    return;
-  }
-  $("waiting").hidden = true;
-  $("workspace").hidden = false;
-  $("task-title").textContent = S.task.title;
-  $("progress").textContent = `課題 ${S.task_index + 1} / ${S.task_count}`;
+  if (pageBlocked || !S) return;
+  renderHeader(S);
+  const kind = S.status === "active" && S.phase ? S.phase.kind : null;
+  if (typeof Materials !== "undefined") Materials.render(kind === "tasks" && S.task ? S.materials : []);
+  if (kind === null) return renderEnd(S);
+  if (kind === "consent") return renderConsent(S);
+  if (kind === "envcheck") return renderEnvcheck(S);
+  if (kind === "test" || kind === "questionnaire") return renderForm(S);
+  renderTasks();
+}
+
+function renderTasks() {
+  showView("workspace");
+  if (!S.task) return;
+  $("progress").textContent = `${S.phase.title}　課題 ${S.task_pos + 1} / ${S.task_count}`;
   if (S.version !== version) {
     // 課題が切り替わった（または初回）：エディタをサーバの内容に合わせる
     renderDescription(S.task.description);
@@ -98,15 +47,36 @@ function render() {
     $("output").textContent = "";
     version = S.version;
     codeHL.refresh();
-  } else if (codeEl.value !== S.code && !queue.length && !flushing) {
+  } else if (codeEl.value !== S.code && !Q.items.length && !flushing) {
     codeEl.value = S.code;
     prevText = S.code;
     codeHL.refresh();
   }
   updateGutter();
   renderChat();
+  renderSubmit();
   renderSupport();
   setBusy(S.busy, "AI が回答を作成しています…");
+  if (S.ai_blocked) { $("prompt").disabled = true; $("send").disabled = true; $("prompt").placeholder = "AI の利用上限に達しました"; }
+}
+
+function renderSubmit() {
+  const r = S.last_submit;
+  const box = $("submit-result");
+  box.textContent = "";
+  if (r) {
+    if (r.passed) box.append(el("span", { class: "pass", text: "合格です。" }), "次の課題に進めます。");
+    else if (r.compile && !r.compile.ok) box.append(el("span", { class: "fail", text: "コンパイルできませんでした。" }), "実行結果の欄を確認してください。");
+    else {
+      const ng = r.results.filter((x) => !x.pass).length;
+      box.append(el("span", { class: "fail", text: `まだ合格ではありません（${r.results.length} 件中 ${ng} 件が不一致）。` }));
+      const pub = r.results.find((x) => x.public && !x.pass);
+      if (pub) box.append(` 入力例の結果が違います。`);
+    }
+  }
+  const last = S.task_pos + 1 >= S.task_count;
+  $("next-task").hidden = !S.task_passed;
+  $("next-task").textContent = last ? "このフェーズを終えて次へ" : "次の課題へ";
 }
 
 function renderDescription(md) {
@@ -168,7 +138,14 @@ function applyEdit(text, e) {
 }
 
 const codeEl = $("code");
+guardPaste(codeEl, "editor");            // 外部からの貼り付けを遮断（§15.2）。paste の他のリスナより先に動く
 const codeHL = attachHighlight(codeEl);
+function editorCopy(cut) {
+  const a = codeEl.selectionStart, b = codeEl.selectionEnd;
+  if (b > a) enqueue("COPY_IN_EDITOR", { offset: a, length: b - a, cut });
+}
+codeEl.addEventListener("copy", () => editorCopy(false));
+codeEl.addEventListener("cut", () => editorCopy(true));
 codeEl.addEventListener("beforeinput", () => {
   pendingSel = { start: codeEl.selectionStart, end: codeEl.selectionEnd };
 });
@@ -218,14 +195,13 @@ function updateGutter() {
 
 // 定期スナップショット（CODE_EDIT 欠損に備えた冗長記録）
 setInterval(() => {
-  if (S && S.task) enqueue("CODE_SNAPSHOT", { text: codeEl.value, reason: "interval" });
+  if (S && S.task && S.phase && S.phase.kind === "tasks" && !locked()) enqueue("CODE_SNAPSHOT", { text: codeEl.value, reason: "interval" });
 }, 10000);
-window.addEventListener("beforeunload", () => {
-  if (S && S.task) {
-    enqueue("CODE_SNAPSHOT", { text: codeEl.value, reason: "unload" });
-    const batch = queue.splice(0, queue.length);
-    fetch("/api/events", { method: "POST", keepalive: true,
-      headers: { "X-Token": TOKEN, "Content-Type": "application/json" }, body: JSON.stringify({ events: batch }) });
+window.addEventListener("pagehide", () => {
+  // 未送信のイベントは端末に保存済み（次に開いたとき送る）。ここでは届けば早く届くように送るだけ
+  if (Q.items.length && !pageBlocked) {
+    fetch("/api/events", { method: "POST", keepalive: true, headers: { "X-Token": TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ page_id: PAGE_ID, events: Q.items.slice(0, 100) }) }).catch(() => {});
   }
 });
 
@@ -237,8 +213,7 @@ $("run").addEventListener("click", async () => {
   out.textContent = "";
   out.append(el("span", { class: "meta", text: "コンパイル・実行中…\n" }));
   try {
-    await flush();
-    const r = await api("/api/run", { code: codeEl.value, stdin: $("stdin").value });
+    const r = await action("/api/run", { code: codeEl.value, stdin: $("stdin").value });
     showRun(out, r);
   } catch (e) {
     out.textContent = "実行できませんでした: " + e.message;
@@ -351,8 +326,7 @@ $("ask").addEventListener("submit", async (e) => {
   if (!text || locked()) return;
   setBusy(true, "送信しています…");
   try {
-    await flush();
-    const r = await api("/api/prompt", { text });
+    const r = await action("/api/prompt", { text });
     $("prompt").value = "";
     S = r.state;
     render();
@@ -475,7 +449,7 @@ function renderText(sp, body, act, last) {
       body.append(el("div", { class: "note", text: "解答例:" }), el("div", { class: "original", text: last.model_answer }));
       if (sp.done) {
         act.append(el("button", { class: "primary", type: "button", text: "確認して閉じる", onclick: async () => {
-          try { await api("/api/support/self_assess", { opportunity_id: sp.opportunity_id, ratings: checks.map((c) => (c.checked ? 1 : 0)) }); }
+          try { await action("/api/support/self_assess", { opportunity_id: sp.opportunity_id, ratings: checks.map((c) => (c.checked ? 1 : 0)) }); }
           catch (e) { /* 自己評価の記録に失敗しても支援は閉じる */ }
           endSupport(sp, "completed");
         } }));
@@ -503,6 +477,7 @@ function renderCode(sp, body, act, last) {
   stdin.value = p.tests[0] || "";
   const out = el("pre", { class: "output", style: "height:auto;max-height:20vh" });
   body.append(ed, el("div", { class: "note", text: "標準入力（試し実行用）" }), stdin);
+  guardPaste(ed, "support");
   const edHL = attachHighlight(ed);
   edHL.wrap.classList.add("mini");
   body.append(out);
@@ -518,7 +493,7 @@ function renderCode(sp, body, act, last) {
   if (!sp.done) {
     act.append(el("button", { type: "button", text: "▶ 試しに実行", onclick: async () => {
       out.textContent = "実行中…";
-      try { showRun(out, await api("/api/support/run", { opportunity_id: sp.opportunity_id, code: ed.value, stdin: stdin.value })); }
+      try { showRun(out, await action("/api/support/run", { opportunity_id: sp.opportunity_id, code: ed.value, stdin: stdin.value })); }
       catch (e) { out.textContent = "実行できませんでした: " + e.message; }
     } }));
     act.append(el("button", { class: "primary", type: "button", text: "提出する", onclick: () => answer(sp, ed.value) }));
@@ -550,7 +525,7 @@ async function clarifySend(sp, mode, choice = null, sentence = "") {
   $("overlay").hidden = true;
   setBusy(true, "AI が回答を作成しています…");
   try {
-    const r = await api("/api/clarify", { opportunity_id: sp.opportunity_id, mode, choice, sentence });
+    const r = await action("/api/clarify", { opportunity_id: sp.opportunity_id, mode, choice, sentence });
     S = r.state;
   } catch (e) { toast("送信できませんでした: " + e.message); }
   await load();
@@ -560,7 +535,7 @@ async function answer(sp, value) {
   const btns = $("ov-actions").querySelectorAll("button");
   btns.forEach((b) => (b.disabled = true));
   try {
-    const r = await api("/api/support/answer", { opportunity_id: sp.opportunity_id, answer: value });
+    const r = await action("/api/support/answer", { opportunity_id: sp.opportunity_id, answer: value });
     S = r.state;
     render();
   } catch (e) {
@@ -571,22 +546,56 @@ async function answer(sp, value) {
 }
 
 async function hint(sp) {
-  try { S = (await api("/api/support/hint", { opportunity_id: sp.opportunity_id })).state; render(); }
+  try { S = (await action("/api/support/hint", { opportunity_id: sp.opportunity_id })).state; render(); }
   catch (e) { toast(e.message); }
 }
 
 async function endSupport(sp, reason) {
   clearInterval(timerHandle);
-  try { S = (await api("/api/support/end", { opportunity_id: sp.opportunity_id, reason })).state; }
+  try { S = (await action("/api/support/end", { opportunity_id: sp.opportunity_id, reason })).state; }
   catch (e) { /* 時間切れ等はサーバ側で終了済み */ }
   await load();
 }
 
+// ------------------------------------------------------------------ 提出と次の課題
+$("submit-task").addEventListener("click", async () => {
+  if (locked()) return;
+  $("submit-task").disabled = true;
+  $("submit-result").textContent = "採点しています…";
+  try {
+    const r = await action("/api/task/submit", { code: codeEl.value });
+    if (!r.ok) toast(r.error);
+    S = r.state;
+    render();
+  } catch (e) {
+    toast(e.status === 409 ? "処理中です。少し待ってから提出してください。" : "提出できませんでした: " + e.message);
+    $("submit-result").textContent = "";
+  } finally {
+    $("submit-task").disabled = false;
+  }
+});
+$("next-task").addEventListener("click", async () => {
+  try { S = (await action("/api/task/next")).state; render(); }
+  catch (e) { toast("進めませんでした: " + e.message); load(); }
+});
+
 // ------------------------------------------------------------------ 起動
-if (!TOKEN) {
-  $("task-title").textContent = "URL に参加者トークンがありません";
-} else {
-  load();
-  // 待機中・課題切替の検出
-  setInterval(() => { if (!S || !S.task) load(); }, 5000);
+async function boot() {
+  if (!TOKEN) { $("end-msg").textContent = "URL に参加コードがありません。メールで届いた URL をそのまま開いてください。"; return; }
+  await flushPrevious();                       // 前回送れなかった記録を先に送る（§15.4）
+  try {
+    const r = await api("/api/hello", { page_id: PAGE_ID, info: clientInfo() });
+    S = r.state;
+  } catch (e) {
+    $("end-msg").textContent = e.status === 403 ? "URL が正しくありません。メールで届いた URL をそのまま開いてください。"
+      : "接続できません。時間をおいて開き直してください。";
+    return;
+  }
+  Q.ack(S.next_seq - 1);                       // サーバ側で適用済みのものは捨てる
+  Q.seq = Math.max(Q.seq, S.next_seq - 1);     // 端末の記録が消えていても連番を重ねない
+  Q.save();
+  render();
+  checkAway("init");
+  setInterval(() => { if (!document.hidden) load(); }, 5000);   // 時間切れによる移行などを反映
 }
+boot();

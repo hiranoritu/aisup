@@ -4,3 +4,4 @@ out/
 *.pyc
 data/
 .venv/
+deploy/.env

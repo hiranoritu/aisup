@@ -10,6 +10,7 @@
 <header class="top">
   <div class="brand">C 学習環境</div>
   <div id="task-title" class="task-title">読み込み中…</div>
+  <div id="phase-timer" class="phase-timer" aria-live="off"></div>
   <div id="progress" class="progress"></div>
 </header>
 
@@ -25,8 +26,56 @@
   <div id="mp-body" class="mp-body"></div>
 </section>
 
-<main id="waiting" class="waiting" hidden>
-  <p id="waiting-msg">開始の合図があるまでお待ちください。</p>
+<main id="view-end" class="waiting">
+  <p id="end-msg">読み込み中です…</p>
+</main>
+
+<main id="view-consent" class="page" hidden>
+  <div class="page-card">
+    <div id="consent-body" class="mp-body doc"></div>
+    <label class="choice"><input type="checkbox" id="consent-check"> 上記の説明を読み、研究への参加に同意します。</label>
+    <div class="ov-actions">
+      <button id="consent-decline" type="button">同意しない</button>
+      <button id="consent-agree" class="primary" type="button" disabled>同意して始める</button>
+    </div>
+    <div id="consent-decline-confirm" class="hint" hidden>
+      同意しない場合、ここで終了します（不利益はありません）。よろしいですか？
+      <button id="consent-decline-no" type="button">戻る</button>
+      <button id="consent-decline-yes" type="button">同意せずに終了する</button>
+    </div>
+  </div>
+</main>
+
+<main id="view-envcheck" class="page" hidden>
+  <div class="page-card">
+    <h2>環境の確認</h2>
+    <p>パソコンのブラウザで参加しているか、通信とプログラムの実行環境が使えるかを確認します。</p>
+    <ul>
+      <li>スマートフォン・タブレットでは参加できません。</li>
+      <li>ブラウザのウィンドウはできるだけ広くしてください。</li>
+      <li>途中で別のタブやアプリに切り替えた時間も記録されます。</li>
+      <li><strong>この画面の AI 以外の AI（ChatGPT など）は使わないでください。</strong></li>
+    </ul>
+    <div class="ov-actions"><button id="env-run" class="primary" type="button">確認する</button></div>
+    <div id="env-result" aria-live="polite"></div>
+  </div>
+</main>
+
+<main id="view-form" class="page" hidden>
+  <div class="page-card">
+    <h2 id="form-title"></h2>
+    <p id="form-intro" class="note"></p>
+    <div id="form-items"></div>
+    <p class="note">回答は自動で保存されます。</p>
+    <div class="ov-actions">
+      <button id="form-submit" class="primary" type="button">提出する</button>
+    </div>
+    <div id="form-confirm" class="hint" hidden>
+      提出すると、このページには戻れません。提出しますか？
+      <button id="form-cancel" type="button">戻る</button>
+      <button id="form-final" class="primary" type="button">提出する</button>
+    </div>
+  </div>
 </main>
 
 <main id="workspace" class="workspace" hidden>
@@ -48,6 +97,11 @@
         <textarea id="stdin" rows="3" spellcheck="false"></textarea>
       </div>
       <button id="run" class="primary">▶ 実行</button>
+    </div>
+    <div class="submitbar">
+      <button id="submit-task" type="button">提出して採点</button>
+      <span id="submit-result" class="note" aria-live="polite"></span>
+      <button id="next-task" class="primary" type="button" hidden>次の課題へ</button>
     </div>
     <div class="output-wrap">
       <div class="pane-head"><span>実行結果</span></div>
@@ -78,8 +132,10 @@
 </main>
 
 <div id="toast" class="toast" hidden></div>
+<script src="/net.js"></script>
 <script src="/highlight.js"></script>
-<script src="/app.js"></script>
 <script src="/materials.js"></script>
+<script src="/phases.js"></script>
+<script src="/app.js"></script>
 </body>
 </html>

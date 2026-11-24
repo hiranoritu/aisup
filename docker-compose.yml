@@ -1,0 +1,49 @@
+# 本番構成（仕様 v1.2 §14, §15.6, §15.7）。手作業の設定を残さないため、構築はこのファイルと deploy/ のスクリプトだけで行う。
+#   必要な環境変数（deploy/.env）：DOMAIN, ACME_EMAIL, OPENAI_API_KEY, ADMIN_TOKEN, ALERT_WEBHOOK_URL（任意）
+#   起動： docker compose --env-file deploy/.env up -d --build
+services:
+  sandbox-image:
+    # 実行用イメージを作るだけのサービス（起動はしない）。アプリが実行ごとに docker run する
+    build: ./sandbox
+    image: aisup-sandbox:1
+    entrypoint: ["true"]
+    restart: "no"
+    profiles: ["build"]
+
+  app:
+    build: .
+    image: aisup-app:latest
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+    volumes:
+      - ./data:/app/data
+      # サンドボックスのコンテナを起動するため Docker を操作する（ホストの管理者権限に近い。アプリ以外を同居させない）
+      - /var/run/docker.sock:/var/run/docker.sock
+    expose:
+      - "8000"
+    logging:
+      driver: json-file
+      options: {max-size: "20m", max-file: "5"}
+
+  caddy:
+    # HTTPS（Let's Encrypt の証明書を自動取得・更新）
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [app]
+
+volumes:
+  caddy_data:
+  caddy_config:

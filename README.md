@@ -1,123 +1,147 @@
-# 生成AI利用 C プログラミング学習支援システム（仕様 v1.1 準拠・開発版）
+# 生成AI利用 C プログラミング学習支援システム（仕様 v1.2 準拠・開発版）
 
-ログから HS×RU の状態を判定して介入を決める**判定エンジン**（`engine/`）と、学習環境（エディタ・AIチャット・実行・支援UI）を提供する**サーバと画面**（`server/`, `web/`）。
-Python 3.10 以上。依存は `tree-sitter` / `tree-sitter-c`（S 特徴）と pytest のみで、版は `requirements.txt` で固定している。
+ログから HS×RU の状態を判定して介入を決める**判定エンジン**（`engine/`）と、遠隔・完全非同期で実験を行う**学習環境**（`server/`, `web/`）。
+仕様の正は `docs/spec_v1.2.md`（v1.1 は履歴）。Python 3.10 以上。サーバは標準ライブラリのみで、依存は `tree-sitter` / `tree-sitter-c`（S 特徴）と pytest（版は `requirements.txt` で固定）。
 
 ```
-docs/spec_v1.1.md        仕様書（正）
-engine/
-  events.py              イベントスキーマ（JSON Lines）
+docs/spec_v1.2.md        仕様書（正）
+engine/                  判定エンジン（LLM・ネットワーク・時計・乱数に依存しない）
   config.py              規則・閾値（rule_version と config_hash を全判定に記録）
-  clex.py                C の字句解析（壊れたコードでも例外を出さない）
-  document.py            エディタ内容の再構成と文字ごとの由来追跡（typed / ai / external / unknown）
-  codeblocks.py          AI 回答からの C コード抽出
-  structure.py           S 特徴（本番は Tree-sitter C、開発用の近似版 lexer_approx もあり）
-  hs.py                  LLM 特徴の検証と HS 規則
-  ru.py                  D/S/C/T/E/I/Q と RU 規則（三値論理）
-  policy.py              9状態→支援、一律群
-  core.py                Engine：サイクル分割・判定窓・クールダウン・介入判断
-  export.py              CSV/JSON 出力
-server/                  サーバ（Python 標準ライブラリのみ）
-  app.py                 HTTP・管理機能・エクスポート（python -m server）
-  session.py             参加者ごとのセッション：イベント保存→エンジン投入→介入フロー・支援UI
-  store.py               追記専用イベントストア（SQLite。UPDATE/DELETE はトリガで拒否）
-  llm.py / fake_llm.py   OpenAI Chat Completions 呼び出し／開発用の偽 LLM
-  features.py            質問特徴の抽出（PROMPT_FEATURES）
-  support.py             支援問題の生成・サンドボックス検証・採点（§6, §7, §13-3）
-  sandbox.py             Docker サンドボックスの呼び出しと §6-2 の検証
-  settings.py            サーバ設定（LLM・支援UI・サンドボックス。ハッシュを SESSION_START に記録）
-  tasks.py / render.py   課題メタデータ／AI 回答のコードブロック分割（block_id は engine と同じ採番）
-sandbox/                 実行用 Docker イメージ（Dockerfile, runner.py）
-web/                     学習者画面（index.html, app.js）と管理画面（admin.html, admin.js）
-tasks/                   課題メタデータ（導入1・主課題3・後続課題2。要確認の初版）
-materials/               教材（Markdown。画面上部の教材バーに表示、閲覧は MATERIAL_VIEW で記録）
+  core.py                Engine：サイクル分割・判定窓・クールダウン・介入判断・v1.2 の補助特徴
+  ru.py / hs.py / policy.py / structure.py / document.py / clex.py / codeblocks.py / export.py / events.py
+server/                  サーバ（標準ライブラリのみ）
+  app.py                 HTTP・管理・エクスポート・バックアップ・定期処理（python -m server）
+  session.py             参加者ごと：連番つき受信→イベント保存→エンジン投入、実験の進行、課題の提出、支援
+  store.py               追記専用イベントストア（SQLite WAL。UPDATE/DELETE はトリガで拒否）
+  sandbox.py             Docker サンドボックス（同時実行数の待ち行列）と §6-2 の検証
+  support.py             支援問題の生成・検証・採点（§6, §7, §13-3）
+  llm.py / fake_llm.py   OpenAI Chat Completions／開発用の偽 LLM
+  features.py / prompts.py / render.py / tasks.py / settings.py
+  allocation.py          ブロック無作為化の割付表（python -m server.allocation）
+  check_llm.py           OpenAI 実接続の確認（python -m server.check_llm）
+  loadtest.py            負荷試験（python -m server.loadtest）
+web/                     学習者画面（index.html, net.js, phases.js, app.js, highlight.js, materials.js）・管理画面
+sandbox/                 実行用 Docker イメージ（gcc＋ASan/UBSan）
+tasks/                   課題（導入1・主課題3・後続課題2）。採点用の公開・非公開入力つき
+materials/               教材（Markdown。画面上部の教材バー）
+instruments/             同意書・事前/事後テスト・質問紙（**見本**。研究者が差し替える）
 prompts/                 学習者用AI・特徴抽出・支援生成・記述採点のプロンプト（版＝内容のハッシュを記録）
-tests/                   受け入れ条件（§10）、特徴量、サーバ、実サンドボックスのテスト
-examples/sample_events.jsonl
+Dockerfile, docker-compose.yml, deploy/   本番構成（HTTPS・構築スクリプト・バックアップ）
+tests/                   受け入れ条件（§10）、エンジン、サーバ、実サンドボックスのテスト
 ```
 
-## 使い方
+## 開発
 
 ```bash
-pip install -r requirements.txt
-docker build -t aisup-sandbox:1 sandbox/                 # 実行サンドボックス（初回・runner.py 変更時）
-python -m pytest                                          # テスト（Docker がなければ実サンドボックスのテストは skip）
-python -m engine examples/sample_events.jsonl --out out/  # ログ再生 → CSV/JSON
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+docker build -t aisup-sandbox:1 sandbox/            # 実行サンドボックス（初回・runner.py 変更時）
+.venv/bin/python -m pytest                          # Docker がなければ実サンドボックスのテストは skip
+python -m engine examples/sample_events.jsonl --out out/   # ログ再生 → CSV/JSON
 ```
 
-### サーバの起動
+手元での動作確認（API キー不要。偽 LLM は課題の参照解を返し、記録上 model="fake"）：
 
 ```bash
-export OPENAI_API_KEY=...   ADMIN_TOKEN=...         # 秘密情報は環境変数だけに置く
-python -m server.check_llm                          # OpenAI 実接続の確認（モデル変更時も実行）
-python -m server --config server_config.json --data data/ --host 0.0.0.0 --port 8000
+python -m server.allocation --blocks 3 --seed 1 --out /tmp/aisup/allocation.csv
+echo '{"llm_provider":"fake","allocation_file":"/tmp/aisup/allocation.csv"}' > /tmp/aisup/dev.json
+ADMIN_TOKEN=devadmin123 python -m server --config /tmp/aisup/dev.json --data /tmp/aisup/data --port 8765
+# 管理画面 http://127.0.0.1:8765/admin で参加コードを発行し、表示された URL を開く
 ```
 
-- `server_config.json`（コミット対象）は研究で固定する設定。モデルは役割ごとに指定する（§13-6）：
-  学習者用AI `gpt-6.2-sol`、特徴抽出・支援生成・記述採点 `gpt-6.1-terra`（2026-11 時点の選定。予備実験で見直す）。
-  OpenAI のこれらのモデルには日付付きの版がないため、応答の `model` を LLM_CALL に毎回記録している。
-- 管理画面 `http://<host>:8000/admin`：参加者登録（群は指定または無作為）、学習者URLのコピー、課題の開始・切替・終了（`task_sequence` の順）、判定の確認、ログと判定結果の zip ダウンロード。
-- 学習者画面 `http://<host>:8000/?t=<トークン>`。
-- API キーなしで動作確認するときは `{"llm_provider": "fake"}` の設定で起動する（偽 LLM は課題の参照解を返す。記録上 model="fake"）。
-- データは `data/events.sqlite3`（追記専用）。再起動すると保存済みイベントを再生して全参加者の状態を復元する。エクスポートの判定結果も保存ログの再生から作る（LLM は呼ばない）。
-- LAN 内の http（localhost 以外）ではブラウザのクリップボード API が使えないため、「コピー」ボタンは代替方式で動く。可能なら https で配信する。
+OpenAI の確認（モデル変更時も実行）：`OPENAI_API_KEY=... python -m server.check_llm`
 
-本番でもサーバは同じ `Engine` を参加者ごとに1つ持ち、保存したイベントを順に `ingest()` に渡す。
-サーバ再起動時はログを先頭から再生して状態を復元する（`replay()`）。エンジンは LLM・サンドボックス・時計に触れないので、同じログと同じ設定からは必ず同じ判断が出る。
+## 実験の流れ（§15.1）と設定
 
-## サーバ・フロントとの約束（介入のタイミング）
+`server_config.json`（コミット対象。研究で固定する設定。秘密情報は入れない）の `phases` の順に自動で進む：
+同意 → 環境確認 → 練習（intro）→ 事前テスト → 主課題（支援あり）→ 後続課題（支援停止）→ 事後テスト → アンケート → 終了。
+
+- フェーズの時間上限は実時間（中断中も減る）。上限で自動的に次へ（`PHASE_END reason=timeout`）。値は仮で、予備実験の後に固定する（§15.3）。
+- 課題フェーズの課題は順番に進み、**「提出して採点」で合格するまで次の課題へ進めない**。課題ごとの時間上限はない。フェーズの時間上限が来たら未完了でも次のフェーズへ（全員が後続課題と事後テストに到達する）。
+- 採点は課題の公開入力（入出力例）と非公開入力で行い、期待出力は参照解をサンドボックスで実行した結果。非公開入力の内容は画面に出さない。
+- 最初に開いてから24時間で無効。30分を超える中断は記録したうえで再開を認める（§13-10）。
+- 学習者用AI：`gpt-6.2-sol`、特徴抽出・支援生成・記述採点：`gpt-6.1-terra`（§13-6。2026-11 時点の選定）。日付付きの版がないため応答の `model` を毎回記録。
+- 参加者ごとの LLM 上限（`llm_limits`）：既定は質問80回・約$2で実験者に通知のみ（`on_limit: "block"` で止める）。
+- 外部AI利用の疑い（§15.2）は記録のみで介入判断に使わない（`engine/config.py` の `policy.contamination_policy`。§13-9 案A）。
+
+## 本番の構築（Oracle Cloud Always Free・東京・Arm。§15.7）
+
+1. **OCI**：ホームリージョンを東京にしてアカウントを作る。Ampere A1（例：2 OCPU・6GB、Ubuntu 22.04/24.04 aarch64）を作成。「out of host capacity」なら別の AD か時間をおいて再試行。VCN のセキュリティ・リストで TCP 80/443 の受信を許可。
+2. **DNS**：独自ドメインの A レコードをインスタンスの公開IPに向ける。
+3. **サーバ**：リポジトリを `/opt/aisup` に置き、`deploy/env.example` を `deploy/.env` にコピーして値を入れ、`sudo bash deploy/setup_server.sh`。
+   Docker・ファイアウォール・HTTPS（Caddy が証明書を自動取得）・毎日のバックアップ（cron 3:30）まで設定される。
+4. **割付表**：`docker compose --env-file deploy/.env exec app python -m server.allocation --blocks 10 --seed <種> --out data/allocation.csv`。種とハッシュを実験記録に残し、以後変えない。
+5. **死活監視**：外部の監視サービスに `https://<ドメイン>/healthz` を登録し、停止を通知させる。`ALERT_WEBHOOK_URL`（Slack/Discord 等）を設定すると、利用上限・内部エラー・期限切れ・完了をサーバから通知する。
+6. **サーバ外へのバックアップ**：研究室の PC で `deploy/pull_backup.sh ubuntu@<ドメイン> ~/aisup_backups` を毎日実行する（cron / launchd）。取り込んだ最新のバックアップを開いてイベント数を表示する。参加者が全フェーズに到達した時点でもサーバ内にバックアップを作る。
+7. **負荷試験**（本番データと分けて行う）：`python -m server.loadtest --url https://<ドメイン> --admin-token ... --n 10 --minutes 5`。
+8. **回収（reclaim）への備え**：メモリ使用率を予備実験前に1週間観察する。
+
+**国内VPSへの移行**（無料枠の条件変更・回収・容量不足・性能不足のとき）：新しいサーバで手順 2〜3 を行い、`data/`（`events.sqlite3`・`allocation.csv`・`backups/`）を旧サーバまたはバックアップから複製して `docker compose up -d`。サーバ起動時にイベントを再生して全参加者の状態が戻る。予備実験の前に一度試す。
+
+**セキュリティの注意**：アプリのコンテナはサンドボックスを起動するため Docker ソケットを使う（ホストの管理者権限に近い）。このサーバにはアプリ以外を置かない。学習者のコードは別の使い捨てコンテナ（ネットワークなし・読み取り専用・nobody・資源制限）で動く。参加コードはアクセスログから除き、Referrer も送らない。
+
+## サーバ・画面の約束
 
 ```
 学習者が送信
- → PROMPT_DRAFT_SUBMIT を保存
- → LLM で質問特徴を抽出 → PROMPT_FEATURES を保存（失敗時も ok:false で保存）
- → engine.ingest(PROMPT_FEATURES) が Decision を返す（確認質問なら None）
-     timing == "pre_send"      : AI に送る前に質問の具体化（P-A）を出す → PROMPT_SENT
-     timing == "post_response" : AI 回答を読み取り専用で表示 → 支援問題を生成・検証
-                                  → 成功なら SUPPORT_SHOWN…SUPPORT_END、失敗なら SUPPORT_INFEASIBLE
-     support_type == None      : そのまま送信・表示して編集可能にする
+ → PROMPT_DRAFT_SUBMIT → LLM で質問特徴 → PROMPT_FEATURES（失敗時も ok:false で保存）
+ → engine.ingest(PROMPT_FEATURES) が Decision を返す（確認質問なら None）→ DECISION を保存
+     pre_send      : AI に送る前に質問の具体化（P-A）→ PROMPT_SENT
+     post_response : AI 回答を読み取り専用で表示 → 支援問題を生成・検証 → SUPPORT_SHOWN…END／SUPPORT_INFEASIBLE
+     None          : そのまま送信・表示して編集可能
 ```
 
-- `SUPPORT_SHOWN` が来た時点でそのサイクルは「介入あり」になり、判定窓から外れ、次の適格機会がクールダウンになる。`SUPPORT_INFEASIBLE` ではどちらも起きない。
-- 支援中（`SUPPORT_SHOWN`〜`SUPPORT_END`）の RUN・AI_RESPONSE・編集は RU の計算に入らない。支援UI内の実行は `SUPPORT_RUN` で記録する。
-- `CODE_EDIT` は `offset / delete_len / insert_text / kind` を必ず送る。AI 回答ペインからコピーした文字列の貼り付けは `kind:"paste", source:{type:"ai", response_id, block_id}`。`block_id` は回答内のコードフェンスの出現順（0始まり）で、`codeblocks.py` と同じ採番にする。
-- `CODE_SNAPSHOT` を定期的に送る。再構成した内容と食い違えば、そのサイクルの由来系特徴（C・I・E）は Unknown になり、`anomalies` に記録される。
+- **連番（v1.2 §2）**：画面のイベントは `client_seq`・`client_t`（ページ読込からの ms）・`page_id` を持ち、約1秒ごとにまとめて送る。サーバは連番の順にだけ適用し（`event_id = c<連番>`）、重複は捨て、欠落が30秒埋まらなければ `CLIENT_GAP` を記録して先へ進む。画面は適用済み（`acked`）になるまで localStorage に保持して再送する。
+- **操作の同期**：実行・質問・提出・支援の操作は `after_seq`（その時点の最後の連番）と `page_id` を付け、未適用のイベントがあればサーバが 409 `not_synced` を返す（画面は送り切ってから再試行）。別のタブで開き直すと古いタブからの送信は 409 `other_page`。
+- `SUPPORT_SHOWN` で「介入あり」になり判定窓から外れ、次の適格機会がクールダウン。`SUPPORT_INFEASIBLE` ではどちらも起きない。支援中の RUN・AI_RESPONSE・編集は RU に入らない。
+- `CODE_EDIT` の由来はサーバが決める：直前の `COPY_FROM_AI` と一致→`ai`、エディタ内のコピー（`COPY_IN_EDITOR`）と一致→`editor`（元の文字の由来を引き継ぐ）、それ以外→`external`（画面で遮断されるはずのものが届いた印 `unblocked_external`）。
 
 ## 実装時に置いた解釈（仕様に明記がなく、予備実験で見直す点）
 
-1. **規則の三値評価**：上位規則が「不明」のときは下位に進まず Unknown にする。例：E が不明なら Constructive の可能性を否定できないので、D≥0.10 でも Active にしない。Unknown 率が上がる方向の解釈。
-2. **T**：（実行時のコード, 標準入力）の組の種類数。同じコード・同じ入力の再実行は1回。生の実行回数は `T_runs`。
-3. **E ①**：h3=1 の質問（新規・確認とも）の後に編集があり、その後に実行があれば1。「仮説に対応する変更か」は見ていない。
-4. **I の「新規作成」**：関数単位で対応付いた場合はサイクル開始時にその関数がなかったこと。断片の場合は対象範囲の80%以上がそのサイクル中に入力されたこと。
-5. **C-A の追加条件**：D か S で Active、E=0 が確定、同じ判定範囲で I=1 が一度も観察されていない。課題ごとの「重要概念」はまだ使っていない（課題メタデータ待ち）。
-6. **P-A の追加条件**：h2=0 かつ D か S で Active（確認質問 Q だけの Active や、改名だけの疑いがあるものは除く）。
-7. **判定窓の範囲**：同じフェーズ（`main`）内のサイクル。課題をまたいでも窓は続く。`policy.window_scope: "task"` で課題内に限定できる。
+判定エンジン：
 
-閾値と上記の切り替えはすべて `config.py` にある。
+1. **規則の三値評価**：上位規則が「不明」のときは下位に進まず Unknown。例：E が不明なら D≥0.10 でも Active にしない。
+2. **T**：（実行時のコード, 標準入力）の組の種類数。生の実行回数は `T_runs`。課題の「提出」は T に数えない（システムの採点で、学習者自身のテストではないため）。
+3. **E ①**：h3=1 の質問の後に編集があり、その後に実行があれば1。「仮説に対応する変更か」は見ていない。**中身の変わらない編集（同じコードの貼り直し）も「修正」に数えている**（未決。下記）。
+4. **I の「新規作成」**：関数単位で対応付いたらサイクル開始時にその関数がなかったこと。断片なら対象範囲の80%以上がそのサイクル中の入力。
+5. **C-A の追加条件**：D か S で Active、E=0 確定、同じ判定範囲で I=1 が未観察。課題の「重要概念」はまだ使っていない。
+6. **P-A の追加条件**：h2=0 かつ D か S で Active（Q だけ・改名だけは除く）。
+7. **判定窓の範囲**：同じフェーズ（`main`）内。課題をまたいでも続く（`policy.window_scope: "task"` で課題内）。
+8. **記録の欠落**（v1.2）：CLIENT_GAP・編集の適用失敗・スナップショット不一致・再開時の不一致のあるサイクルは C・I・E を Unknown（I も含める）。
+9. **外部AI利用の疑い**（v1.2 §15.2。基準値は `config.py`）：サイクル内の PASTE_BLOCKED が1回以上、または「10秒以上の離脱から戻って60秒以内に150文字以上の打鍵」。離脱は「タブ非表示またはウィンドウのフォーカス喪失」、長さは端末の単調時刻で測る（離脱中にページを読み直した離脱は長さ不明として数える）。
 
-### サーバ・画面で置いた解釈（予備実験で見直す点）
+サーバ・画面：
 
-8. **支援生成の時間上限**（§6-4）：15秒は**1回の生成ごと**（LLM＋検証）。再生成した場合、学習者の待ち時間は最大で約2倍になる。
-9. **記述式の正誤**（§13-3 案A）：観点をすべて満たしたら正解。終了時は満たした／足りない観点とフィードバックを見せ、模範解答は見せない（案B `self_assess` では観点と模範解答を見せて自己評価）。
-10. **P-A**：困っている点の選択と一文は記録するが、AI に追記するのは**一文だけ**（選択肢は送らない）。P-A は採点しない。時間切れは原文のまま送る（`SUPPORT_END reason=timeout`）。
-11. **終了時のフィードバック**：動作予測は実際の実行結果と正解の選択肢、問題の分解は正解の選択肢と解説、自力応用は入力ごとの期待出力との比較。
-12. **AI 応答を待つ間**はエディタ・実行をロックする（送信からAI回答表示まで）。
-13. **学習者用AIの文脈**：システムプロンプトに課題文を入れ、会話履歴は課題ごと（最大20件）。エディタのコードは自動では渡さない。
-14. **貼り付けの由来判定**：改行コード（CRLF/LF）と末尾の空白の違いは無視して、直前の COPY_FROM_AI と一致を判定する。由来はサーバが決め、画面からの申告は使わない。
-15. **サンドボックス**：LeakSanitizer は無効（コンテナ内で ptrace を使えないため。リークは検証対象外）。CPU 2秒・壁時計3秒・メモリ256MB・プロセス64・出力64KB・ネットワークなし・読み取り専用（/tmp のみ書込可）。
-16. **選択肢の並び**は乱数を使わず opportunity_id と選択肢文字列のハッシュで決める（再現可能）。
-17. 学習者画面で編集を差分にするとき、打鍵と貼り付けは選択範囲とデータから正確に作る。それ以外（取り消し・IME など）は前後一致の差分で代用するので、同じ文字が並ぶ箇所では位置が1文字ずれることがある（内容の再構成は常に一致）。
+10. **支援生成の時間上限**（§6-4）：15秒は1回の生成ごと（再生成すると待ち時間は最大で約2倍）。
+11. **記述式の正誤**（§13-3 案A）：観点をすべて満たしたら正解。終了時は満たした／足りない観点を見せ、模範解答は見せない。
+12. **P-A**：困っている点の選択と一文は記録するが、AI に追記するのは一文だけ。採点しない。時間切れは原文のまま送る。
+13. **終了時のフィードバック**：動作予測は実行結果と正解、問題の分解は正解と解説、自力応用は入力ごとの期待出力との比較。
+14. **AI 応答を待つ間**はエディタ・実行をロックする。
+15. **学習者用AIの文脈**：システムプロンプトに課題文、会話履歴は課題ごと（最大20件）。エディタのコードは自動では渡さない。
+16. **貼り付けの許可**（§15.2、2026-11-24 決定）：このページ内でコピーした文字列（AI 回答・エディタ・出力欄など）だけ貼り付けられる。外部からの貼り付け・ドロップは遮断して PASTE_BLOCKED（文字数のみ）。チャット欄と標準入力欄は制限しない。支援の小エディタとテストのコード欄にも同じ制限をかける。
+17. **サンドボックス**：LeakSanitizer は無効（ptrace 不可）。CPU 2秒・壁時計3秒・メモリ256MB・プロセス64・出力64KB・同時実行2（待ち行列）。
+18. **選択肢の並び**は opportunity_id と選択肢のハッシュで決める（乱数を使わない）。
+19. **編集の差分**：打鍵と貼り付けは選択範囲とデータから正確に作る。取り消し・IME などは前後一致の差分（同じ文字が並ぶ箇所で位置が1文字ずれうる。内容は常に一致）。
+20. **再開**：ページを開くたびに（2回目以降）SESSION_RESUME を記録する（中断時間はサーバが最後のイベントからの経過で測る）。
+21. **環境確認**：スマートフォン・タブレット（iPadOS を含む）とサンドボックス接続失敗は先へ進めない。画面幅1000px未満・通信が遅い・非対応ブラウザは警告のみ。
+22. **テスト・質問紙**：回答は自動保存（変化した項目だけ記録）。「提出」で次へ。必須項目は質問紙で指定（見本では負担・必要性・外部AI利用の自己申告）。
 
-## 未実装・未検証（次に Claude Code で作るもの）
+## 2026-11-24 の決定（仕様 v1.2 実装時）
 
-- [x] **サンドボックス**：Docker（`sandbox/`）。`tests/test_sandbox.py` で制限と §6-2 の検証を確認済み。
-- [x] **支援問題の生成と検証**（仕様 §6）：`server/support.py`。生成プロンプトは `prompts/support/`（**未検証の草案**）。
-- [x] **サーバ**：イベント保存（追記専用）、OpenAI 中継、参加者ごとの Engine、管理画面、エクスポート。
-- [x] **Web 画面**：エディタ（打鍵・貼り付け・コピーのフック）、AI チャット、実行欄、支援オーバーレイ。**実ブラウザでの動作確認はまだ**（API とサーバ側の流れはテスト済み）。
-- [ ] **実ブラウザでの確認**：日本語入力（IME）、取り消し、コピー→貼り付けの由来、支援オーバーレイの各型、タイマー、課題切替。
-- [ ] **OpenAI 実接続**：モデル名の決定（§13-6）と、特徴抽出・支援生成・採点プロンプトの試行。
+- エディタ内のコピー→貼り付けは許可（外部からの貼り付けだけ遮断）。
+- 課題は「提出して自動採点に合格するまで次に進めない」。課題ごとの時間上限は設けない。主課題・後続課題のフェーズごとに時間上限を設け、上限が来たら未完了でも次のフェーズへ。
+- 外部AI利用の疑いフラグは上記 9 の既定値で実装し、`config.py` で調整する。
+
+## 未実装・未検証
+
+- [ ] **実ブラウザでの確認**（v1.2 の画面）：同意〜終了の流れ、貼り付けの遮断、タブ離脱、再開、日本語入力、支援の各型。
+- [ ] **OpenAI 実接続**：API キーを設定して `python -m server.check_llm`。特徴抽出・支援生成・採点のプロンプトの試行と、15秒に収まるか。
+- [ ] **本番サーバでの負荷試験**（Oracle Ampere 2コア・実際の LLM）。手元（Mac・偽LLM・同時実行2）では10名×2分で実行の95%点 220ms・エラー0。
+- [ ] **研究者が用意するもの**：同意書（倫理審査で承認された文面）、事前・事後テスト、質問紙（`instruments/`）、課題・教材の最終確認、フェーズの時間上限。
 - [ ] **質問特徴抽出の人手ラベルとの一致確認**（`prompts/prompt_features.md`）。
-- [ ] **課題・教材の確認**：`tasks/*.json`（6問）と `materials/*.md`（4本）は初版。研究者が内容・難易度・所要時間を確認する。参照解と教材のコード例はサンドボックスで検証済み（`tests/test_sandbox.py`）。
-- [ ] §13-1 案B（スレッド返信UIで新規／確認を決める方式）は未実装（エンジン側の切替が必要）。
-- [ ] 本実験前の凍結：`engine/config.py` の `rule_version`、`server_config` のハッシュ、プロンプトの版、サンドボックスイメージを記録して固定する。
-- [ ] Tree-sitter 版 S の未決事項（上記）。
+- [ ] **人手ラベル付け用の出力**（RQ1：支援提示前の情報だけを評価者に見せる資料）。
+- [ ] **未決の判定規則**：
+  - E の「修正」に中身の変わらない編集を含めるか（上記 3）。
+  - Tree-sitter 版 S：①文字列リテラル内部（`string_content`/`escape_sequence`）が系列に入る、②ポインタ型へのキャスト・`sizeof(int *)`（`abstract_pointer_declarator`）を PTR_DECL に写していない、③`S_analyzer` に Tree-sitter の版を記録していない。
+  - 支援中に教材を開けるか（今は開ける）。
+- [ ] §13-1 案B（スレッド返信UI）は未実装。
+- [ ] **本実験前の凍結**：`rule_version`（現在 `v1.2-dev.1`）、`server_config` のハッシュ、プロンプト・教材・同意書・テストの版、割付表のハッシュ、サンドボックスイメージを記録して固定する。

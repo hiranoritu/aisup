@@ -38,47 +38,55 @@
 
   <div id="main" hidden>
     <div class="card">
-      <h2>使い方</h2>
+      <h2>使い方（遠隔・非同期の実施）</h2>
       <ol class="meta" style="margin:0;padding-left:1.4em">
-        <li>「参加者の登録」で群を選んで登録する（群は学習者には表示されません）。</li>
-        <li>表の「URLをコピー」で学習者URLを取得し、学習者のブラウザで開く。学習者画面は開始まで「お待ちください」と表示されます。</li>
-        <li>「開始」を押すと最初の課題（導入）が始まる。以降は「次の課題へ」で 導入 → 主課題1 → 主課題2 → 後続課題 → 終了 と進みます。支援が出るのは主課題だけです。</li>
-        <li>「判定」で各サイクルの状態（HS×RU）と介入判断を確認できます。終了後は「ログと判定結果をダウンロード」。</li>
+        <li>「参加コードを発行」で1人ずつ発行し、表示された URL を参加者にメールで送ります。群は割付表（ブロック無作為化）の順に自動で決まり、参加者には表示されません。</li>
+        <li>参加者は都合のよい時間に URL を開き、同意 → 環境確認 → 練習 → 事前テスト → 課題 → 課題（後半）→ 事後テスト → アンケートと自動で進みます。</li>
+        <li>この画面で進行状況を確認できます（5秒ごとに更新）。問題があれば「停止」で参加を止められます。</li>
+        <li>氏名・メールと参加コードの対応表はこのサーバに置かず、別に保管してください。</li>
       </ol>
     </div>
+
     <div class="card">
-      <h2>参加者の登録</h2>
+      <h2>参加コードの発行</h2>
       <form class="row" id="create">
         <label>ID <input type="text" id="c-id" placeholder="空欄で自動（P001…）" style="width:180px"></label>
         <label>群
           <select id="c-group">
-            <option value="random">無作為に割付</option>
-            <option value="adaptive">適応群</option>
-            <option value="uniform">一律群</option>
+            <option value="auto">割付表に従う</option>
+            <option value="adaptive">適応群（手動・予備確認用）</option>
+            <option value="uniform">一律群（手動・予備確認用）</option>
           </select>
         </label>
-        <label>メモ <input type="text" id="c-note" style="width:200px"></label>
-        <button class="primary">登録</button>
+        <label>メモ <input type="text" id="c-note" style="width:200px" placeholder="個人情報は書かない"></label>
+        <button class="primary">発行</button>
       </form>
       <div id="created" class="meta"></div>
+      <div id="alloc" class="meta"></div>
+    </div>
+
+    <div class="card" id="alerts-card" hidden>
+      <h2>通知</h2>
+      <ul id="alerts" class="meta" style="margin:0;padding-left:1.2em"></ul>
     </div>
 
     <div class="card">
       <div class="row" style="justify-content:space-between">
         <h2>参加者</h2>
         <div class="row">
-          <button id="advance-all">全員を次の課題へ</button>
+          <span id="sandbox" class="meta"></span>
+          <button id="backup">今すぐバックアップ</button>
           <button id="export">ログと判定結果をダウンロード（zip）</button>
         </div>
       </div>
       <div style="overflow:auto">
         <table>
-          <thead><tr><th>ID</th><th>群</th><th>課題</th><th class="num">サイクル</th><th class="num">介入</th>
-            <th>状態（完了サイクル）</th><th>支援中</th><th class="num">異常</th><th>学習者URL</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>群</th><th>状態</th><th>フェーズ</th><th>課題</th><th class="num">残り</th>
+            <th class="num">最終通信</th><th class="num">サイクル</th><th class="num">介入</th><th class="num">質問</th>
+            <th class="num">費用$</th><th class="num">疑い</th><th class="num">異常/エラー</th><th>URL</th><th></th></tr></thead>
           <tbody id="rows"></tbody>
         </table>
       </div>
-      <p class="meta">課題の順序: <span id="tasks"></span>。「次の課題へ」で開始・切替・終了します（支援中なら中断として記録）。</p>
     </div>
 
     <div class="card detail" id="detail" hidden>

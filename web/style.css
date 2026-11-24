@@ -22,6 +22,22 @@ textarea, input[type=text] { font: inherit; border: 1px solid var(--line); borde
 .brand { font-weight: 700; }
 .task-title { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .progress { color: var(--muted); font-size: 13px; }
+.phase-timer { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--muted); }
+.phase-timer.low { color: var(--ng); font-weight: 700; }
+
+/* 同意・環境確認・テスト・質問紙 */
+.page { flex: 1; overflow: auto; padding: 16px; }
+.page-card { max-width: 860px; margin: 0 auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+.page-card h2 { margin: 0; font-size: 18px; }
+.doc { max-height: none; padding: 0; }
+fieldset.item { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 0 0 10px; }
+fieldset.item legend { font-weight: 600; padding: 0 4px; white-space: pre-wrap; }
+.scale { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.scale-pt { display: flex; flex-direction: column; align-items: center; font-size: 13px; cursor: pointer; }
+.submitbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.submitbar .pass { color: var(--ok); font-weight: 700; }
+.submitbar .fail { color: var(--ng); font-weight: 700; }
 
 .waiting { display: grid; place-items: center; flex: 1; color: var(--muted); font-size: 18px; }
 
