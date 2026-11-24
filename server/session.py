@@ -192,7 +192,7 @@ class ParticipantSession:
         elif typ == "LLM_CALL":
             self.cost_usd += self.app.llm_cost(p.get("model", ""), p.get("usage") or {})
         elif typ == "LIMIT_REACHED":
-            self.limits_hit.add(p.get("limit", ""))
+            self.limits_hit.add(f'{p.get("action", "notify")}:{p.get("limit", "")}')
         elif typ in ("SANDBOX_ERROR", "AI_ERROR"):
             self.errors += 1
         elif typ == "PROMPT_FEATURES" and dec is not None:
@@ -354,7 +354,8 @@ class ParticipantSession:
                                   if not m.get("phases") or (self.task and self.task.phase in m["phases"])],
                     "code": self.engine.doc.text if self.task else "",
                     "chat": chat, "support": self._support_public(),
-                    "ai_blocked": "questions" in self.limits_hit and sc["llm_limits"]["on_limit"] == "block",
+                    "ai_blocked": self.ai_blocked(),
+                    "ai_blocked_message": sc["llm_limits"]["block_message"] if self.ai_blocked() else "",
                 })
             return st
 
@@ -388,6 +389,7 @@ class ParticipantSession:
                 "allocation_file_hash": self.app.allocation_hash,
                 "rule_version": self.engine.rule_version, "config_hash": self.engine.cfg_hash,
                 "server_config_hash": self.app.server_cfg_hash,
+                "structure_analyzer": getattr(self.engine.analyzer, "version_label", self.engine.analyzer.name),
                 "phases": [p["id"] for p in self.app.phases],
                 "sandbox_image": self.app.server_cfg["sandbox"]["image"]}, task_id="")
 
@@ -627,6 +629,10 @@ class ParticipantSession:
                 typ = "CLIENT_INFO"
             else:
                 p["material_version"] = m["version"]
+                # 支援の表示中に開閉したか（教材は支援中も開ける。2026-11-24 決定）
+                p["during_support"] = self.support is not None
+                if self.support is not None:
+                    p["opportunity_id"] = self.support.get("opportunity_id")
         elif typ == "PASTE_BLOCKED":
             p = {k: p.get(k) for k in ("client_seq", "client_t", "page_id", "server_recv_t", "length", "via")}
         self._new_event(f"c{seq}", typ, p, None)
@@ -704,8 +710,7 @@ class ParticipantSession:
                 raise BadRequest("no active task")       # テスト・質問紙中は AI チャットを使えない（§10）
             if self.support is not None:
                 raise BadRequest("support active")
-            lim = self.app.server_cfg["llm_limits"]
-            if lim["on_limit"] == "block" and self.limits_hit:
+            if self.ai_blocked():
                 raise BadRequest("llm limit reached")
             task = self.task
             draft = self.emit("PROMPT_DRAFT_SUBMIT", {"text": text})
@@ -729,16 +734,24 @@ class ParticipantSession:
                 return {"stage": "pre_send_support"}
         return self._send_to_ai(draft.event_id, text, text, dec)
 
+    def ai_blocked(self) -> bool:
+        return any(k.startswith("block:") for k in self.limits_hit)
+
     def _check_limits(self) -> None:
-        """参加者ごとの質問回数・費用の上限（§15.6）。超えたら一度だけ記録して実験者に通知する。"""
+        """参加者ごとの質問回数・費用の上限（§15.6）。上限ごとに一度だけ記録して実験者に通知する。
+        notify は通知のみ、block は以後の学習者用 AI への質問を止める（画面に理由を表示）。"""
         lim = self.app.server_cfg["llm_limits"]
-        for name, over in (("questions", self.questions >= lim["max_questions"]),
-                           ("cost", self.cost_usd >= lim["max_cost_usd"])):
-            if over and name not in self.limits_hit:
-                self.emit("LIMIT_REACHED", {"limit": name, "questions": self.questions,
-                                            "cost_usd": round(self.cost_usd, 4), "action": lim["on_limit"]})
-                self.app.notify(f"{self.pid}: LLM の利用上限（{name}）に達しました"
-                                f"（質問 {self.questions} 回・約 ${self.cost_usd:.2f}）")
+        for action in ("notify", "block"):
+            t = lim[action]
+            for name, over in (("questions", self.questions >= t["max_questions"]),
+                               ("cost", self.cost_usd >= t["max_cost_usd"])):
+                if over and f"{action}:{name}" not in self.limits_hit:
+                    self.emit("LIMIT_REACHED", {"limit": name, "action": action, "questions": self.questions,
+                                                "cost_usd": round(self.cost_usd, 4),
+                                                "threshold": t["max_questions"] if name == "questions" else t["max_cost_usd"]})
+                    what = "通知" if action == "notify" else "停止（以後 AI に質問できません）"
+                    self.app.notify(f"{self.pid}: LLM の利用上限（{name}・{what}）に達しました"
+                                    f"（質問 {self.questions} 回・約 ${self.cost_usd:.2f}）")
 
     def clarify_submit(self, opportunity_id: str, choice: Optional[int], sentence: str, mode: str) -> dict[str, Any]:
         """P-A：選択・一文の記録 → 支援終了 → 「原文＋一文」か「原文のまま」で送信。"""

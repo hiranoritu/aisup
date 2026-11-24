@@ -40,7 +40,7 @@ def test_engine_records_tree_sitter_as_S_analyzer():
     log.ask("次", F(h2=1))
     eng = replay(log.events)
     c = eng.cycles[0]
-    assert c.features["S_analyzer"] == "tree_sitter_c"
+    assert c.features["S_analyzer"] == "tree_sitter_c tree-sitter=0.27.0 tree-sitter-c=0.24.2"
     assert c.features["S"] == 1  # if とポインタ操作を書き足している
 
 
@@ -69,7 +69,7 @@ def test_syntax_error_is_not_comparable(ts, src):
 def test_identical_is_zero(ts):
     for prog in (PROG_A, PROG_B):
         r = ts.compare(prog, prog)
-        assert r.distance == 0.0 and not r.structural_change and r.analyzer == "tree_sitter_c"
+        assert r.distance == 0.0 and not r.structural_change and r.analyzer.startswith("tree_sitter_c ")
 
 
 def test_rename_is_not_structural(ts):
@@ -196,3 +196,27 @@ def test_deeply_nested_does_not_recurse(ts):
     src = "int f(int x){ return " + "(" * 500 + "x" + ")" * 500 + "; }"
     seq = ts.sequence(src)
     assert seq is not None and seq.count("parenthesized_expression") == 500
+
+
+# ---------- v1.2-dev.2 の変更 ----------
+def test_string_and_char_contents_are_not_compared(ts):
+    a = 'int main(void){ char c = \'a\'; puts("abc"); return 0; }'
+    b = 'int main(void){ char c = \'\\n\'; puts("x\\ty" "z"); return 0; }'
+    sa, sb = ts.sequence(a), ts.sequence(b)
+    assert "string_content" not in sa + sb and "escape_sequence" not in sa + sb and "character" not in sa + sb
+    assert sa.count("STR") == 1 and sb.count("STR") == 2 and "CHR" in sa and "CHR" in sb
+    r = ts.compare('int main(void){ puts("a\\n"); }', 'int main(void){ puts("hello world"); }')
+    assert r.distance == 0.0
+
+
+def test_pointer_cast_and_sizeof_are_pointer_structure(ts):
+    r = ts.compare("void f(void){ p = (int)q; n = sizeof(int); }", "void f(void){ p = (int *)q; n = sizeof(int *); }")
+    assert ts.sequence("void f(void){ p = (int *)q; n = sizeof(int *); }").count("PTR_DECL") == 2
+    assert r.structural_change and "abstract_pointer_declarator" not in ts.sequence("x = (char *)p;")
+
+
+def test_versions_recorded_and_checked():
+    an = TreeSitterAnalyzer(DEFAULT_CONFIG["structure_analyzer_versions"])
+    assert an.versions == {"tree-sitter": "0.27.0", "tree-sitter-c": "0.24.2"}
+    with pytest.raises(RuntimeError):
+        TreeSitterAnalyzer({"tree-sitter-c": "0.0.1"})

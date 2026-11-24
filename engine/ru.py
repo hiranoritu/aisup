@@ -172,7 +172,7 @@ def compute_ru(oc: OpenCycle, end_doc: OriginDoc, cfg: dict, analyzer: Structure
     feats["Q"] = Q
 
     # --- E（観察可能な検証系列）---
-    E = _compute_E(oc, unk)
+    E = _compute_E(oc, unk, cfg.get("E_edit_rule", "any"))
     feats["E"] = E
 
     # --- コード対応付け ---
@@ -311,9 +311,14 @@ def compute_ru(oc: OpenCycle, end_doc: OriginDoc, cfg: dict, analyzer: Structure
     return RUOutput("Unknown", "rule4_insufficient_evidence", [], feats, unk, review)
 
 
-def _compute_E(oc: OpenCycle, unk: list[str]) -> Optional[int]:
+def _compute_E(oc: OpenCycle, unk: list[str], edit_rule: str = "any") -> Optional[int]:
     runs = oc.runs
-    edits_t = [e.t for e in oc.edits]
+    if edit_rule == "content_changed":
+        edits_t = [e.t for e in oc.edits if e.changed]
+    elif edit_rule == "any":
+        edits_t = [e.t for e in oc.edits]
+    else:
+        raise ValueError(f"unknown E_edit_rule: {edit_rule}")
     # ② 異なる入力2種類以上でテスト → 修正 → 以前のテストの再実行
     for k, r in enumerate(runs):
         before = runs[:k]

@@ -27,6 +27,7 @@ from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 from engine.config import load_config, make_config
+from engine.structure import get_analyzer
 from engine.core import replay
 from engine.events import dump_jsonl
 from engine.export import export
@@ -60,6 +61,8 @@ class App:
         self.server_cfg = server_cfg
         self.server_cfg_hash = server_config_hash(server_cfg)
         self.engine_cfg = engine_cfg or make_config()
+        # 構文解析器の版が設定と違えばここで止める（参加者を受け付けてから失敗しない）
+        get_analyzer(self.engine_cfg["structure_analyzer"], self.engine_cfg.get("structure_analyzer_versions"))
         self.clock = clock
         os.makedirs(data_dir, exist_ok=True)
         self.data_dir = data_dir

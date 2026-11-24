@@ -27,7 +27,7 @@ def cycle_with(log, mid, feats=None):
 
 
 def test_version_bumped():
-    assert make_config()["rule_version"] == "v1.2-dev.1"
+    assert make_config()["rule_version"] == "v1.2-dev.2"
 
 
 def test_client_gap_makes_C_I_E_unknown_not_passive():
@@ -157,3 +157,32 @@ def test_phase_end_closes_open_cycle():
     log.add("PHASE_END", {"phase": "main", "reason": "timeout"})
     eng = replay(log.events)
     assert eng.open is None and eng.cycles[0].close_reason == "phase_end"
+
+
+def _E_after_repaste(rule):
+    """エディタに既に PROG_A → h3=1 の質問 → 同じコードを全選択して貼り直す → 実行。"""
+    log = Log()
+    log.task("t1", starter=PROG_A)
+    p = log.ask("x が入れ替わらないのは swap に値を渡しているからだと思う", F(h3=1))
+    r = log.respond(code_block(PROG_A), p)
+    log.paste_replace_all(PROG_A, r)        # 中身が同じ貼り直し
+    log.run("")
+    log.ask("next", F(h2=1))
+    return replay(log.events, make_config({"E_edit_rule": rule})).cycles[0].features["E"]
+
+
+def test_E_ignores_repaste_of_same_code():
+    assert _E_after_repaste("content_changed") == 0
+    assert _E_after_repaste("any") == 1             # v1.2-dev.1 の規則
+
+
+def test_E_counts_real_change_after_hypothesis():
+    log = Log()
+    log.task("t1")
+    p = log.ask("仮説", F(h3=1))
+    r = log.respond(code_block(PROG_A), p)
+    log.paste_replace_all(PROG_A, r)
+    log.type_at("return 0;", "/* 変更 */ ", after=False)
+    log.run("")
+    log.ask("next", F(h2=1))
+    assert replay(log.events).cycles[0].features["E"] == 1

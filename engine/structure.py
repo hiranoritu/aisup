@@ -86,6 +86,7 @@ class LexerApproxAnalyzer:
     """開発用近似。`*` `&` は前後の文脈から単項/二項を推定する。"""
 
     name = "lexer_approx"
+    version_label = "lexer_approx"
 
     def sequence(self, src: str) -> Optional[list[str]]:
         res = lex(src)
@@ -146,6 +147,8 @@ class TreeSitterAnalyzer:
         "call_expression": "CALL",
         "pointer_expression": None,  # 演算子で分岐（* → PTR_DEREF, & → ADDR_OF）
         "pointer_declarator": "PTR_DECL",
+        # v1.2-dev.2：ポインタ型へのキャスト・sizeof(int *) もポインタ関連の構造とする
+        "abstract_pointer_declarator": "PTR_DECL",
         "subscript_expression": "SUBSCRIPT",
         "if_statement": "if",
         "else_clause": "else",
@@ -158,11 +161,21 @@ class TreeSitterAnalyzer:
         "goto_statement": "goto",
     }
     _DROP = {"comment"}
+    # v1.2-dev.2：リテラルの中身（string_content・escape_sequence・character）は比較しない。子をたどらずこの記号だけ置く
+    _LEAF = {"string_literal": "STR", "char_literal": "CHR", "system_lib_string": "STR",
+             "raw_string_literal": "STR"}
     _IDENT = {"identifier", "field_identifier", "type_identifier", "statement_identifier"}
 
-    def __init__(self) -> None:
+    def __init__(self, expected_versions: Optional[dict] = None) -> None:
         import tree_sitter_c as tsc  # noqa: WPS433
         from tree_sitter import Language, Parser
+        self.versions = installed_versions()
+        if expected_versions:
+            # 設定に記録した版と違えば止める（文法の版でノード型が変わり得るため。黙って別の版で判定しない）
+            diff = {k: (v, self.versions.get(k)) for k, v in expected_versions.items() if self.versions.get(k) != v}
+            if diff:
+                raise RuntimeError(f"tree-sitter version mismatch (expected, installed): {diff}")
+        self.version_label = "tree_sitter_c " + " ".join(f"{k}={v}" for k, v in sorted(self.versions.items()))
         self._parser = Parser(Language(tsc.language()))
 
     def sequence(self, src: str) -> Optional[list[str]]:
@@ -177,6 +190,9 @@ class TreeSitterAnalyzer:
             if node.type in self._DROP:
                 continue
             if node.is_named and node is not root:
+                if node.type in self._LEAF:
+                    seq.append(self._LEAF[node.type])
+                    continue
                 if node.type in self._IDENT:
                     seq.append("ID")
                 elif node.type == "pointer_expression":
@@ -192,12 +208,24 @@ class TreeSitterAnalyzer:
         return seq
 
     def compare(self, before_src: str, after_src: str) -> Optional[StructureResult]:
-        return _compare_sequences(self.sequence(before_src), self.sequence(after_src), self.name)
+        return _compare_sequences(self.sequence(before_src), self.sequence(after_src), self.version_label)
 
 
-def get_analyzer(name: str) -> StructureAnalyzer:
+def installed_versions() -> dict:
+    """Tree-sitter 本体と C 文法の版（パッケージの版）。"""
+    from importlib.metadata import PackageNotFoundError, version
+    out = {}
+    for pkg in ("tree-sitter", "tree-sitter-c"):
+        try:
+            out[pkg] = version(pkg)
+        except PackageNotFoundError:
+            out[pkg] = None
+    return out
+
+
+def get_analyzer(name: str, expected_versions: Optional[dict] = None) -> StructureAnalyzer:
     if name == "tree_sitter_c":
-        return TreeSitterAnalyzer()  # 未導入なら ImportError をそのまま出す（黙って近似に落とさない）
+        return TreeSitterAnalyzer(expected_versions)  # 未導入なら ImportError をそのまま出す（黙って近似に落とさない）
     if name == "lexer_approx":
         return LexerApproxAnalyzer()
     raise ValueError(f"unknown structure analyzer: {name}")

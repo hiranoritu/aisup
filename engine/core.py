@@ -28,7 +28,8 @@ class Engine:
         self.cfg = cfg or make_config()
         self.cfg_hash = config_hash(self.cfg)
         self.rule_version = self.cfg["rule_version"]
-        self.analyzer = analyzer or get_analyzer(self.cfg["structure_analyzer"])
+        self.analyzer = analyzer or get_analyzer(self.cfg["structure_analyzer"],
+                                                 self.cfg.get("structure_analyzer_versions"))
 
         self.participant_id: Optional[str] = None
         self.group: Optional[str] = None
@@ -166,8 +167,9 @@ class Engine:
             origin = list(self._clip[1]) if self._clip is not None and self._clip[0] == ins else f"other@{cid or 'none'}"
         if ev.payload.get("kind") == "typed" and ins:
             self._count_burst(ev, len(ins))
-        res = self.doc.apply(int(ev.payload.get("offset", -1)), int(ev.payload.get("delete_len", 0)),
-                             ev.payload.get("insert_text", ""), origin)
+        off, dl = int(ev.payload.get("offset", -1)), int(ev.payload.get("delete_len", 0))
+        changed = self.doc.text[off:off + dl] != ins if off >= 0 else True   # 中身の変わらない貼り直しは False
+        res = self.doc.apply(off, dl, ins, origin)
         if not res.ok:
             self._anomaly(ev, "edit_failed:" + res.reason)
             if self.open:
@@ -178,7 +180,7 @@ class Engine:
             if in_support:
                 self.open.review.append("edit_during_support")
             else:
-                self.open.edits.append(EditRec(ev.t, ev.payload.get("kind", "other"), origin))
+                self.open.edits.append(EditRec(ev.t, ev.payload.get("kind", "other"), origin, changed))
         return None
 
     def _on_code_snapshot(self, ev: Event, _s: bool):

@@ -57,6 +57,8 @@ function renderTasks() {
   renderSubmit();
   renderSupport();
   setBusy(S.busy, "AI が回答を作成しています…");
+  $("ai-blocked").hidden = !S.ai_blocked;
+  $("ai-blocked").textContent = S.ai_blocked_message || "";
   if (S.ai_blocked) { $("prompt").disabled = true; $("send").disabled = true; $("prompt").placeholder = "AI の利用上限に達しました"; }
 }
 
@@ -139,6 +141,7 @@ function applyEdit(text, e) {
 
 const codeEl = $("code");
 guardPaste(codeEl, "editor");            // 外部からの貼り付けを遮断（§15.2）。paste の他のリスナより先に動く
+guardPaste($("prompt"), "chat");         // チャット欄も同じ（2026-11-24 決定）。このページ内でコピーした文字列は貼れる
 const codeHL = attachHighlight(codeEl);
 function editorCopy(cut) {
   const a = codeEl.selectionStart, b = codeEl.selectionEnd;

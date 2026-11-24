@@ -130,3 +130,5 @@ const Materials = {
   },
 };
 document.getElementById("mp-close").addEventListener("click", () => Materials.close());
+// ページを閉じる・読み直すときに開いたままなら閉じたと記録する（端末に保存され、次に開いたときに送られる）
+window.addEventListener("pagehide", () => Materials.close());

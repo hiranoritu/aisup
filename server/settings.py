@@ -68,7 +68,7 @@ DEFAULT_SERVER_CONFIG: dict[str, Any] = {
         {"id": "envcheck", "kind": "envcheck", "time_limit_s": None},
         {"id": "intro", "kind": "tasks", "time_limit_s": 600, "tasks": ["intro_sum"]},
         {"id": "pretest", "kind": "test", "time_limit_s": 600, "instrument": "instruments/pretest.json"},
-        {"id": "main", "kind": "tasks", "time_limit_s": 3000, "tasks": ["main_swap", "main_minmax", "main_count"]},
+        {"id": "main", "kind": "tasks", "time_limit_s": 2700, "tasks": ["main_swap", "main_minmax", "main_count"]},
         {"id": "post", "kind": "tasks", "time_limit_s": 1500, "tasks": ["post_reverse", "post_divmod"]},
         {"id": "posttest", "kind": "test", "time_limit_s": 600, "instrument": "instruments/posttest.json"},
         {"id": "questionnaire", "kind": "questionnaire", "time_limit_s": None,
@@ -80,8 +80,14 @@ DEFAULT_SERVER_CONFIG: dict[str, Any] = {
         "gap_timeout_s": 30,         # 連番の欠落がこの秒数埋まらなければ CLIENT_GAP（§2）
         "tick_s": 2,                 # 時間上限・期限の確認間隔
     },
-    # 参加者ごとの LLM 利用上限（§15.6）。on_limit: "notify"（実験者に通知のみ）/ "block"（質問を止める）
-    "llm_limits": {"max_questions": 80, "max_cost_usd": 2.0, "on_limit": "notify"},
+    # 参加者ごとの LLM 利用上限（§15.6。2026-11-24 決定）。質問回数・費用（全役割の合計の見積もり）のどちらかが
+    # notify に達したら実験者に通知、block に達したら学習者用 AI への質問を止める（参加者に block_message を表示）。
+    "llm_limits": {
+        "notify": {"max_questions": 80, "max_cost_usd": 2.0},
+        "block": {"max_questions": 240, "max_cost_usd": 6.0},
+        "block_message": "AI への質問の利用上限に達したため、この後は AI に質問できません。"
+                         "課題はこのまま自分で進めてください（実験はこのまま続けられます）。",
+    },
     # 料金（USD / 100万トークン：[入力, 出力]）。費用の見積もりに使う
     "llm_prices": {"gpt-6.2-sol": [2.0, 10.0], "gpt-6.1-terra": [1.0, 5.0], "gpt-6-luna": [0.1, 0.5],
                    "gpt-6.2-astra": [8.0, 40.0]},
@@ -131,6 +137,13 @@ def server_config_hash(cfg: dict[str, Any]) -> str:
 
 def validate_server_config(cfg: dict[str, Any]) -> list[str]:
     errs = []
+    lim = cfg.get("llm_limits", {})
+    for tier in ("notify", "block"):
+        t = lim.get(tier)
+        if not isinstance(t, dict) or not {"max_questions", "max_cost_usd"} <= set(t):
+            errs.append(f"llm_limits.{tier} needs max_questions and max_cost_usd")
+    if not lim.get("block_message"):
+        errs.append("llm_limits.block_message is required")
     if cfg["llm_provider"] not in ("openai", "fake"):
         errs.append(f"llm_provider must be openai|fake: {cfg['llm_provider']}")
     if cfg["llm_provider"] == "openai":

@@ -312,18 +312,33 @@ def test_block_randomization_table_and_issue(tmp_path):
         app.create_participant(None, "auto")                     # 使い切った
 
 
-def test_llm_limit_notifies_and_blocks(tmp_path):
-    app = make_app(tmp_path, Script(), server_overrides={"llm_limits": {"max_questions": 2, "max_cost_usd": 99,
-                                                                       "on_limit": "block"}})
+def test_llm_limit_notifies_then_blocks(tmp_path):
+    app = make_app(tmp_path, Script(), server_overrides={"llm_limits": {
+        "notify": {"max_questions": 2, "max_cost_usd": 99}, "block": {"max_questions": 3, "max_cost_usd": 99},
+        "block_message": "上限に達しました（テスト）"}})
     s = start(app, "adaptive")
     s.submit_prompt("q1")
     s.submit_prompt("q2")
     lim = events_of(app, s, "LIMIT_REACHED")
-    assert len(lim) == 1 and lim[0].payload["limit"] == "questions"
+    assert [(e.payload["action"], e.payload["limit"]) for e in lim] == [("notify", "questions")]
     assert any("上限" in a["message"] for a in app.alerts)
-    assert s.state()["ai_blocked"] is True
+    assert s.state()["ai_blocked"] is False                 # 通知だけでは止めない
+    s.submit_prompt("q3")
+    lim = events_of(app, s, "LIMIT_REACHED")
+    assert [(e.payload["action"], e.payload["limit"]) for e in lim] == [("notify", "questions"), ("block", "questions")]
+    st = s.state()
+    assert st["ai_blocked"] is True and st["ai_blocked_message"] == "上限に達しました（テスト）"
     with pytest.raises(BadRequest):
-        s.submit_prompt("q3")
+        s.submit_prompt("q4")
+    # 再生しても止まったまま
+    app2 = make_app(tmp_path, Script(), server_overrides={"llm_limits": app.server_cfg["llm_limits"]})
+    assert app2.session(s.pid).state()["ai_blocked"] is True
+
+
+def test_default_llm_limits():
+    from server.settings import DEFAULT_SERVER_CONFIG as D
+    assert D["llm_limits"]["notify"] == {"max_questions": 80, "max_cost_usd": 2.0}
+    assert D["llm_limits"]["block"] == {"max_questions": 240, "max_cost_usd": 6.0}
 
 
 def test_llm_cost_from_usage(tmp_path):

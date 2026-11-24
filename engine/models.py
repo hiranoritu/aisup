@@ -31,7 +31,8 @@ class RunRec:
 class EditRec:
     t: float
     kind: str
-    origin: str
+    origin: "str | list[str]"
+    changed: bool = True     # コードの中身が変わったか（同じ文字列での置き換えは False）
 
 
 @dataclass

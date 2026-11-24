@@ -64,6 +64,7 @@ async function refresh() {
     }
     tr.append(ops);
     if (p.limits.length || p.errors) tr.style.background = "#fff8e1";
+    if (p.limits.some((k) => k.startsWith("block:"))) { tr.style.background = "#fdecea"; tr.title = "AI 利用上限で質問を停止中"; }
     tb.append(tr);
   }
 }

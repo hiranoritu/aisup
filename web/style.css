@@ -135,6 +135,7 @@ fieldset.item legend { font-weight: 600; padding: 0 4px; white-space: pre-wrap; 
 .empty { color: var(--muted); font-size: 14px; }
 
 .busy { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+.ai-blocked { margin: 0 0 8px; padding: 8px 10px; border: 1px solid var(--warn); border-radius: 6px; color: var(--warn); font-size: 14px; }
 .spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent);
   border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

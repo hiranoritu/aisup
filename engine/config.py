@@ -10,7 +10,7 @@ import json
 from typing import Any
 
 DEFAULT_CONFIG: dict[str, Any] = {
-    "rule_version": "v1.2-dev.1",
+    "rule_version": "v1.2-dev.2",
     "thresholds": {
         # RU（仕様 §4）
         "D_active": 0.10,          # D >= これで Active の根拠
@@ -45,6 +45,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     # 本番は "tree_sitter_c"。"lexer_approx" は開発用の近似（仕様外）。
     "structure_analyzer": "tree_sitter_c",
+    # Tree-sitter 本体と C 文法の版（requirements.txt と一致させる。違う版が入っていると判定エンジンが起動しない）
+    "structure_analyzer_versions": {"tree-sitter": "0.27.0", "tree-sitter-c": "0.24.2"},
+    # E の「修正」（§4）："content_changed"＝コードの中身が変わった編集だけ（v1.2-dev.2）／"any"＝すべての編集（v1.2-dev.1）
+    "E_edit_rule": "content_changed",
 }
 
 
