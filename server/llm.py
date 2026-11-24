@@ -49,8 +49,8 @@ class OpenAIClient(LLMClient):
         rc = self._roles[role]
         model, params = rc["model"], dict(rc.get("params") or {})
         body: dict[str, Any] = {"model": model, "messages": messages, **params}
-        if json_mode:
-            body["response_format"] = {"type": "json_object"}
+        if json_mode and rc.get("response_format"):
+            body["response_format"] = rc["response_format"]
         req = urllib.request.Request(
             self._base + "/chat/completions", data=json.dumps(body).encode("utf-8"),
             headers={"Authorization": f"Bearer {self._key}", "Content-Type": "application/json"})

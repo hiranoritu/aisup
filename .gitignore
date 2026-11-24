@@ -3,5 +3,4 @@ __pycache__/
 out/
 *.pyc
 data/
-server_config.json
 .venv/

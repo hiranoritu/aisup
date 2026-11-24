@@ -578,3 +578,63 @@ def test_http_material_endpoint(http_app):
     assert _req(base + "/materials/howto.md")[0] == 200
     assert _req(base + "/materials/../server/app.py")[0] == 404
     assert _req(base + "/highlight.js")[0] == 200 and _req(base + "/materials.js")[0] == 200
+
+
+# ---------------------------------------------------------------- OpenAI クライアント（偽の API サーバで検証）
+@pytest.fixture
+def fake_openai():
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    seen = []
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            seen.append({"path": self.path, "auth": self.headers.get("Authorization"), "body": body})
+            if body["model"] == "bad-model":
+                out, code = {"error": {"message": "model not found"}}, 404
+            else:
+                out, code = {"model": body["model"] + "-2026-11-17", "usage": {"total_tokens": 3},
+                             "choices": [{"message": {"content": '{"ok": 1}'}}]}, 200
+            data = json.dumps(out).encode()
+            self.send_response(code)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}/v1", seen
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_openai_client_request_and_response(fake_openai):
+    from server.llm import OpenAIClient
+    base, seen = fake_openai
+    roles = {"features": {"model": "gpt-6.1-terra", "params": {"reasoning_effort": "none"}, "timeout_s": 5,
+                          "response_format": {"type": "json_object"}},
+             "chat": {"model": "gpt-6.2-sol", "params": {"reasoning_effort": "low"}, "timeout_s": 5},
+             "grade": {"model": "bad-model", "params": {}, "timeout_s": 5}}
+    c = OpenAIClient("sk-test", roles, base)
+    r = c.complete("features", [{"role": "user", "content": "q"}], json_mode=True)
+    assert r.ok and r.text == '{"ok": 1}' and r.model == "gpt-6.1-terra-2026-11-17"   # 実際に応答したモデル名を記録
+    req = seen[-1]
+    assert req["path"] == "/v1/chat/completions" and req["auth"] == "Bearer sk-test"
+    assert req["body"]["reasoning_effort"] == "none" and req["body"]["response_format"] == {"type": "json_object"}
+    assert "temperature" not in req["body"]
+    c.complete("chat", [{"role": "user", "content": "q"}])
+    assert "response_format" not in seen[-1]["body"]
+    r = c.complete("grade", [{"role": "user", "content": "q"}], json_mode=True)
+    assert not r.ok and r.error.startswith("http_404") and "model not found" in r.error
+
+
+def test_committed_server_config_is_valid(monkeypatch):
+    from server.settings import abspath, load_server_config, validate_server_config
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    cfg = load_server_config(abspath("server_config.json"))
+    assert validate_server_config(cfg) == []
+    assert all(cfg["llm"][r]["model"] for r in ("chat", "features", "support", "grade"))
+    assert "OPENAI_API_KEY" not in json.dumps(cfg) and "sk-" not in json.dumps(cfg)

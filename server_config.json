@@ -1,0 +1,10 @@
+{
+  "_comment": "研究で固定するサーバ設定（秘密情報は入れない。API キーと管理トークンは環境変数）。変更したら SESSION_START の server_config_hash が変わる。",
+  "llm_provider": "openai",
+  "llm": {
+    "chat":     {"model": "gpt-6.2-sol",   "params": {"reasoning_effort": "low"},  "timeout_s": 60},
+    "features": {"model": "gpt-6.1-terra", "params": {"reasoning_effort": "none"}, "timeout_s": 8},
+    "support":  {"model": "gpt-6.1-terra", "params": {"reasoning_effort": "low"},  "timeout_s": 12},
+    "grade":    {"model": "gpt-6.1-terra", "params": {"reasoning_effort": "low"},  "timeout_s": 12}
+  }
+}

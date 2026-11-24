@@ -47,11 +47,14 @@ python -m engine examples/sample_events.jsonl --out out/  # ログ再生 → CSV
 ### サーバの起動
 
 ```bash
-cp server_config.example.json server_config.json   # モデル名を記入（§13-6）
 export OPENAI_API_KEY=...   ADMIN_TOKEN=...         # 秘密情報は環境変数だけに置く
+python -m server.check_llm                          # OpenAI 実接続の確認（モデル変更時も実行）
 python -m server --config server_config.json --data data/ --host 0.0.0.0 --port 8000
 ```
 
+- `server_config.json`（コミット対象）は研究で固定する設定。モデルは役割ごとに指定する（§13-6）：
+  学習者用AI `gpt-6.2-sol`、特徴抽出・支援生成・記述採点 `gpt-6.1-terra`（2026-11 時点の選定。予備実験で見直す）。
+  OpenAI のこれらのモデルには日付付きの版がないため、応答の `model` を LLM_CALL に毎回記録している。
 - 管理画面 `http://<host>:8000/admin`：参加者登録（群は指定または無作為）、学習者URLのコピー、課題の開始・切替・終了（`task_sequence` の順）、判定の確認、ログと判定結果の zip ダウンロード。
 - 学習者画面 `http://<host>:8000/?t=<トークン>`。
 - API キーなしで動作確認するときは `{"llm_provider": "fake"}` の設定で起動する（偽 LLM は課題の参照解を返す。記録上 model="fake"）。

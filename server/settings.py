@@ -19,11 +19,13 @@ DEFAULT_SERVER_CONFIG: dict[str, Any] = {
     # "openai" | "fake"（fake は開発・テスト用の決定的な応答。本実験では使わない）
     "llm_provider": "openai",
     # §13-6：モデルは役割ごとに固定。model が空のまま openai で起動するとエラーにする。
+    # params は API にそのまま渡す（例 {"reasoning_effort": "low"}）。temperature を受け付けないモデルがあるので
+    # 既定では入れない。response_format は JSON を返させる役割で使う（null にすると送らない）。
     "llm": {
         "chat":     {"model": "", "params": {}, "timeout_s": 60},   # 学習者用AI（両群で固定）
-        "features": {"model": "", "params": {"temperature": 0}, "timeout_s": 8},
-        "support":  {"model": "", "params": {"temperature": 0}, "timeout_s": 12},
-        "grade":    {"model": "", "params": {"temperature": 0}, "timeout_s": 12},
+        "features": {"model": "", "params": {}, "timeout_s": 8, "response_format": {"type": "json_object"}},
+        "support":  {"model": "", "params": {}, "timeout_s": 12, "response_format": {"type": "json_object"}},
+        "grade":    {"model": "", "params": {}, "timeout_s": 12, "response_format": {"type": "json_object"}},
     },
     "openai_base_url": "https://api.openai.com/v1",
     "prompts": {
