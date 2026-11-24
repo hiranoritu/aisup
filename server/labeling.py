@@ -3,8 +3,13 @@
     # 資料を作る（管理画面の「データの書き出し」で得た zip から）
     python -m server.labeling make --zip export.zip --out labeling/ --seed 20261124
 
-    # 評価者のラベルを集計する（評価者間一致・システムとの一致）
-    python -m server.labeling score --dir labeling/ --labels rater_a.csv rater_b.csv [--gold consensus.csv]
+    # 手順（2026-11-24 決定：正解は合議で決める）
+    # 1) 2名が独立に label_sheet.csv に記入
+    # 2) 評価者間の一致（κ）を出し、合議用の一覧を作る
+    python -m server.labeling disagree --dir labeling/ --labels rater_a.csv rater_b.csv
+    #    → labeling/consensus/disagreements.html（不一致の項目だけ）と gold_draft.csv（一致した値は記入済み）
+    # 3) 合議で gold_draft.csv の空欄を埋め、正解として渡す
+    python -m server.labeling score --dir labeling/ --labels rater_a.csv rater_b.csv --gold gold.csv
 
 出力（make）：
 - 評価者に渡すもの（`for_raters/`）：items/<item_id>.html（1サイクル1件）、index.html、label_sheet.csv（記入用）、
@@ -44,7 +49,8 @@ from .tasks import load_task
 
 HS_LABELS = ("Passive", "Active", "Constructive")
 RU_LABELS = ("Passive", "Active", "Constructive")
-NA = "Undeterminable"          # 評価者が「判断できない」としたもの
+NA = "Undeterminable"          # 評価者が「判定不能」としたもの
+ALIASES = {"判定不能": NA, "判断できない": NA, "不明": NA}
 SHOWN_TYPES = {"PROMPT_DRAFT_SUBMIT", "AI_RESPONSE", "CODE_EDIT", "COMPILE", "RUN", "TASK_SUBMIT"}
 
 
@@ -256,18 +262,34 @@ def item_html(item_id: str, it: Item, task_text: str) -> str:
     return "<!doctype html><meta charset='utf-8'>" + "\n".join(parts)
 
 
-GUIDE = """# 記入の手引き（下書き：研究者が確定させる）
+GUIDE = """# 記入の手引き（定義の部分は下書き：研究者が確定させる）
+
+## 進め方（正解は合議で決める）
+
+1. **独立に記入**：評価者2名が、相談せずにそれぞれ全項目に記入する。
+   `label_sheet.csv` をコピーして自分の名前を付け（例：`rater_a.csv`）、各行に記入する。
+2. **一致の確認**：研究者が `python -m server.labeling disagree --dir <資料> --labels rater_a.csv rater_b.csv` を実行し、
+   評価者間の一致（一致率・Cohen の κ）を記録する。合議の前の κ を報告する。
+3. **合議**：`consensus/disagreements.html` に不一致の項目だけが並ぶ。2名（必要なら第三者）で話し合い、
+   `consensus/gold.csv`（`gold_draft.csv` をコピーしたもの）の空欄を埋める。一致した項目は記入済み。
+   合議でも決まらないものは `Undeterminable` とする。
+4. **集計**：`python -m server.labeling score --dir <資料> --labels rater_a.csv rater_b.csv --gold consensus/gold.csv`。
+
+## 記入のしかた
 
 各項目（index.html から開く）は、学習者が AI に1つの質問をしてから次の新しい質問をするまでの区間です。
 画面に出ている情報だけで判断してください（前後の項目は別の学習者のことがあります）。
 
-`label_sheet.csv` をコピーして自分の名前を付け、各行に記入します。
-
-| 列 | 値 |
+| 列 | 値（いずれか1つ） |
 |---|---|
-| HS | 質問のしかた：`Passive` / `Active` / `Constructive` / `Undeterminable`（判断できない） |
-| RU | 回答の使い方：`Passive` / `Active` / `Constructive` / `Undeterminable` |
+| HS | 質問のしかた：`Passive` / `Active` / `Constructive` / `Undeterminable`（判定不能） |
+| RU | 回答の使い方：`Passive` / `Active` / `Constructive` / `Undeterminable`（判定不能） |
 | note | 任意（迷った点など） |
+
+`Undeterminable` の代わりに「判定不能」と書いてもかまいません。空欄は「未記入」として扱います（判定不能とは別）。
+
+**判定不能を選ぶとき**：示された情報だけでは決められないとき。とくに「（ここから先の記録は評価の対象外です）」と
+表示された項目は、途中で記録が打ち切られているため、RU は判定不能になることが多いです。無理に Passive にしないでください。
 
 ## HS（援助要請）の目安（仕様 §3）
 - Constructive：自分の仮説や考えを示している、または希望する支援の形を主体的に指定している。
@@ -330,7 +352,8 @@ def make(zip_path: str, out_dir: str, seed: int, phases: list[str], cfg: dict,
         })
     with open(os.path.join(rdir, "index.html"), "w", encoding="utf-8") as f:
         f.write(f"<!doctype html><meta charset='utf-8'><title>評価項目一覧</title><style>{CSS}</style>"
-                f"<h1>評価項目一覧（{len(rows)} 件）</h1><ol>" +
+                f"<h1>評価項目一覧（{len(rows)} 件）</h1>"
+                f"<p>記入は guide.md を読んでから。値は Passive / Active / Constructive / Undeterminable（判定不能）。</p><ol>" +
                 "".join(f"<li><a href='items/{r['item_id']}.html'>{r['item_id']}</a></li>" for r in rows) + "</ol>")
     with open(os.path.join(rdir, "label_sheet.csv"), "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
@@ -363,6 +386,7 @@ def read_labels(path: str) -> dict[str, dict[str, str]]:
             lab = {}
             for dim, allowed in (("HS", HS_LABELS), ("RU", RU_LABELS)):
                 v = (row.get(dim) or "").strip()
+                v = ALIASES.get(v, v)
                 if v and v not in allowed and v != NA:
                     raise ValueError(f"{path}: {iid} の {dim} が不正です: {v!r}（{'/'.join(allowed)}/{NA}）")
                 lab[dim] = v
@@ -411,13 +435,20 @@ def confusion(gold: list[str], pred: list[str], rows: Iterable[str], cols: Itera
     return {g: {p: sum(1 for x, y in zip(gold, pred) if x == g and y == p) for p in cols} for g in rows}
 
 
-def score(dir_: str, label_paths: list[str], gold_path: Optional[str] = None) -> dict:
+def _read_key(dir_: str) -> dict[str, dict]:
     with open(os.path.join(dir_, "_key", "key.csv"), encoding="utf-8-sig", newline="") as f:
-        key = {r["item_id"]: r for r in csv.DictReader(f)}
-    raters = {os.path.splitext(os.path.basename(p))[0]: read_labels(p) for p in label_paths}
-    res: dict[str, Any] = {"items": len(key), "raters": list(raters)}
+        return {r["item_id"]: r for r in csv.DictReader(f)}
 
-    # ---- 評価者間一致（全員が記入した項目）
+
+def _read_raters(label_paths: list[str]) -> dict[str, dict]:
+    raters = {os.path.splitext(os.path.basename(p))[0]: read_labels(p) for p in label_paths}
+    if len(raters) != len(label_paths):
+        raise ValueError("評価者のファイル名が重複しています（ファイル名を評価者名として使います）")
+    return raters
+
+
+def inter_rater(key: dict, raters: dict) -> dict:
+    """評価者間の一致（全員が記入した項目）。"""
     agree = {}
     for dim in ("HS", "RU"):
         ids = [i for i in key if all(r.get(i, {}).get(dim) for r in raters.values())]
@@ -428,12 +459,81 @@ def score(dir_: str, label_paths: list[str], gold_path: Optional[str] = None) ->
         if len(raters) == 2:
             d["cohen_kappa"] = cohen_kappa([t[0] for t in table], [t[1] for t in table])
         agree[dim] = d
-    res["inter_rater"] = agree
+    return agree
+
+
+def disagree(dir_: str, label_paths: list[str]) -> dict:
+    """合議用：不一致の項目だけの一覧（HTML・CSV）と、一致した値を記入済みの gold_draft.csv を作る。"""
+    key = _read_key(dir_)
+    raters = _read_raters(label_paths)
+    names = list(raters)
+    out = os.path.join(dir_, "consensus")
+    os.makedirs(out, exist_ok=True)
+    draft, rows = [], []
+    missing = {n: [i for i in key if not all(raters[n].get(i, {}).get(d) for d in ("HS", "RU"))] for n in names}
+    for iid in key:
+        g, diff = {}, []
+        for dim in ("HS", "RU"):
+            vals = [raters[n].get(iid, {}).get(dim, "") for n in names]
+            if all(vals) and len(set(vals)) == 1:
+                g[dim] = vals[0]
+            else:
+                g[dim] = ""
+                diff.append(dim)
+        draft.append([iid, g["HS"], g["RU"], ""])
+        if diff:
+            rows.append((iid, diff, {n: raters[n].get(iid, {}) for n in names},
+                         {n: _note(label_paths[k], iid) for k, n in enumerate(names)}))
+    with open(os.path.join(out, "gold_draft.csv"), "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["item_id", "HS", "RU", "note"])
+        w.writerows(draft)
+    with open(os.path.join(out, "disagreements.csv"), "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["item_id", "dims"] + [f"{d}_{n}" for n in names for d in ("HS", "RU")] + [f"note_{n}" for n in names])
+        for iid, diff, labs, notes in rows:
+            w.writerow([iid, "+".join(diff)] + [labs[n].get(d, "") for n in names for d in ("HS", "RU")] +
+                       [notes[n] for n in names])
+    head = "".join(f"<th>{_esc(n)}</th>" for n in names)
+    body = []
+    for iid, diff, labs, notes in rows:
+        cells = []
+        for n in names:
+            v = " / ".join(f"{d}: {_esc(labs[n].get(d) or '（未記入）')}" for d in ("HS", "RU"))
+            cells.append(f"<td>{v}{'<br><span class=t>' + _esc(notes[n]) + '</span>' if notes[n] else ''}</td>")
+        body.append(f"<tr><td><a href='../for_raters/items/{iid}.html'>{iid}</a></td><td>{'・'.join(diff)}</td>{''.join(cells)}</tr>")
+    ir = inter_rater(key, raters)
+    with open(os.path.join(out, "disagreements.html"), "w", encoding="utf-8") as f:
+        f.write(f"<!doctype html><meta charset='utf-8'><title>合議用の一覧</title><style>{CSS}</style>"
+                f"<h1>合議用の一覧（不一致 {len(rows)} 件／全 {len(key)} 件）</h1>"
+                f"<p>合議の結果は gold_draft.csv をコピーした gold.csv の空欄に記入する（一致した項目は記入済み）。</p>"
+                f"<table><tr><th>項目</th><th>不一致</th>{head}</tr>{''.join(body)}</table>")
+    res = {"items": len(key), "disagreements": len(rows), "inter_rater": ir,
+           "missing": {n: len(v) for n, v in missing.items()}, "out": out}
+    with open(os.path.join(out, "inter_rater_before_consensus.json"), "w", encoding="utf-8") as f:
+        json.dump(res, f, ensure_ascii=False, indent=2)
+    return res
+
+
+def _note(path: str, iid: str) -> str:
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        for row in csv.DictReader(f):
+            if (row.get("item_id") or "").strip() == iid:
+                return (row.get("note") or "").strip()
+    return ""
+
+
+def score(dir_: str, label_paths: list[str], gold_path: Optional[str] = None) -> dict:
+    key = _read_key(dir_)
+    raters = _read_raters(label_paths)
+    res: dict[str, Any] = {"items": len(key), "raters": list(raters)}
+    res["inter_rater"] = inter_rater(key, raters)
 
     # ---- 正解（合議の結果があればそれ。なければ全員一致の項目だけ）
     if gold_path:
         gold = read_labels(gold_path)
         res["gold"] = "consensus_file"
+        res["gold_missing"] = {d: sum(1 for i in key if not gold.get(i, {}).get(d)) for d in ("HS", "RU")}
     else:
         gold = {}
         for i in key:
@@ -442,10 +542,12 @@ def score(dir_: str, label_paths: list[str], gold_path: Optional[str] = None) ->
                 vals = [r.get(i, {}).get(dim) for r in raters.values()]
                 g[dim] = vals[0] if vals and all(vals) and len(set(vals)) == 1 else ""
             gold[i] = g
-        res["gold"] = "unanimous_only"
+        res["gold"] = "unanimous_only"   # 合議の前の目安（本番の報告は --gold で合議の結果を渡す）
 
     # ---- システムとの一致
     sys_col = {"HS": "sys_hs", "RU": "sys_ru"}
+    # RU は「支援表示で打ち切った項目を除いた結果」（not_truncated）も出す（打ち切ると RU が判定不能になりやすいため）
+    res["truncated_items"] = sum(1 for r in key.values() if r["truncated_at_support"] == "True")
     for dim, labels in (("HS", HS_LABELS), ("RU", RU_LABELS)):
         for subset, cond in (("all", lambda r: True),
                              ("not_truncated", lambda r: r["truncated_at_support"] != "True")):
@@ -494,10 +596,13 @@ def main(argv=None) -> None:
     m.add_argument("--engine-config", help="判定エンジンの設定（本番と同じもの。省略時は既定）")
     m.add_argument("--tasks-dir", default=abspath("tasks"))
     m.add_argument("--include-loadtest", action="store_true")
+    d = sub.add_parser("disagree", help="評価者間の一致と、合議用の不一致一覧・gold_draft.csv を作る")
+    d.add_argument("--dir", required=True, help="make の --out")
+    d.add_argument("--labels", nargs="+", required=True, help="評価者ごとの記入済み label_sheet（ファイル名が評価者名）")
     s = sub.add_parser("score", help="評価者のラベルを集計する")
     s.add_argument("--dir", required=True, help="make の --out")
     s.add_argument("--labels", nargs="+", required=True, help="評価者ごとの記入済み label_sheet（ファイル名が評価者名）")
-    s.add_argument("--gold", help="合議で決めた正解（同じ形式）。省略時は全員一致の項目だけを正解にする")
+    s.add_argument("--gold", help="合議で決めた正解（gold_draft.csv を埋めたもの）。省略時は全員一致の項目だけ（合議前の目安）")
     s.add_argument("--json", help="結果を JSON で保存する")
     a = ap.parse_args(argv)
     if a.cmd == "make":
@@ -508,6 +613,10 @@ def main(argv=None) -> None:
                     a.tasks_dir, a.include_loadtest)
         print(json.dumps(info, ensure_ascii=False, indent=2))
         print(f"評価者には {os.path.join(a.out, 'for_raters')} だけを渡してください（_key は渡さない）。")
+    elif a.cmd == "disagree":
+        res = disagree(a.dir, a.labels)
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        print(f"合議用の一覧: {os.path.join(res['out'], 'disagreements.html')}")
     else:
         res = score(a.dir, a.labels, a.gold)
         text = json.dumps(res, ensure_ascii=False, indent=2)

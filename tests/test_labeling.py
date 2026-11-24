@@ -54,9 +54,12 @@ def test_make_hides_identity_and_system_output(tmp_path, exported):
     rdir = out / "for_raters"
     texts = [p.read_text(encoding="utf-8") for p in (rdir / "items").iterdir()]
     assert len(texts) == info["items"]
-    blob = "\n".join(texts) + (rdir / "index.html").read_text(encoding="utf-8")
+    blob = "\n".join(texts)
+    index = (rdir / "index.html").read_text(encoding="utf-8")
     for secret in (sa.pid, su.pid, "adaptive", "uniform", "Passive", "Pending", "cycle_", "opportunity"):
-        assert secret not in blob
+        assert secret not in blob                       # 各項目にシステムの判定・群・ID を出さない
+    for secret in (sa.pid, su.pid, "adaptive", "uniform", "Pending", "cycle_"):
+        assert secret not in index
     assert all("質問" in t and "AI 回答" in t for t in texts)
     assert sum("<span class='k'>実行</span>" in t for t in texts) >= 4
     # 各項目には自分の質問だけが出る（次の質問は出ない）
@@ -150,3 +153,49 @@ def test_statistics():
     assert cohen_kappa(list("ab"), list("ba")) == pytest.approx(-1.0)
     assert fleiss_kappa([["a", "a"], ["b", "b"]], "ab") == 1.0
     assert macro_f1(["a", "b"], ["a", "a"], "ab") == pytest.approx((2 / 3 + 0) / 2)
+
+
+def test_disagree_then_score_with_consensus(tmp_path, exported):
+    zpath, _, _ = exported
+    out = tmp_path / "lab"
+    make(str(zpath), str(out), 7, ["main"], make_config(), "tasks")
+    with open(out / "_key" / "key.csv", encoding="utf-8-sig") as f:
+        key = list(csv.DictReader(f))
+    ids = [r["item_id"] for r in key]
+    a = [[i, "Active", "Passive", ""] for i in ids]
+    b = [list(x) for x in a]
+    b[0][1], b[0][3] = "Constructive", "仮説がある"
+    b[1][2] = "判定不能"                                   # 日本語の別名も受け付ける
+    _write(tmp_path / "rater_a.csv", a)
+    _write(tmp_path / "rater_b.csv", b)
+    res = main(["disagree", "--dir", str(out), "--labels", str(tmp_path / "rater_a.csv"), str(tmp_path / "rater_b.csv")])
+    cdir = out / "consensus"
+    html_ = (cdir / "disagreements.html").read_text(encoding="utf-8")
+    assert ids[0] in html_ and ids[1] in html_ and ids[2] not in html_ and "仮説がある" in html_
+    with open(cdir / "disagreements.csv", encoding="utf-8-sig") as f:
+        rows = list(csv.DictReader(f))
+    assert [r["item_id"] for r in rows] == ids[:2] and rows[1]["RU_rater_b"] == NA
+    with open(cdir / "gold_draft.csv", encoding="utf-8-sig") as f:
+        draft = list(csv.reader(f))
+    assert draft[1] == [ids[0], "", "Passive", ""] and draft[2] == [ids[1], "Active", "", ""]
+    assert draft[3] == [ids[2], "Active", "Passive", ""]
+    ir = json.loads((cdir / "inter_rater_before_consensus.json").read_text(encoding="utf-8"))
+    assert ir["disagreements"] == 2 and ir["inter_rater"]["HS"]["cohen_kappa"] is not None
+    # 合議で空欄を埋めて正解として渡す
+    draft[1][1], draft[2][2] = "Constructive", NA
+    with open(tmp_path / "gold.csv", "w", encoding="utf-8-sig", newline="") as f:
+        csv.writer(f).writerows(draft)
+    sc = score(str(out), [str(tmp_path / "rater_a.csv"), str(tmp_path / "rater_b.csv")], str(tmp_path / "gold.csv"))
+    assert sc["gold"] == "consensus_file" and sc["gold_missing"] == {"HS": 0, "RU": 0}
+    assert sc["RU_all"]["n_gold_undeterminable"] == 1 and sc["RU_all"]["n"] == len(ids) - 1
+    assert "RU_not_truncated" in sc and sc["truncated_items"] >= 1
+    assert sc["RU_not_truncated"]["n"] <= sc["RU_all"]["n"] - sc["truncated_items"] + 1
+
+
+def test_guide_and_sheet_offer_undeterminable(tmp_path, exported):
+    zpath, _, _ = exported
+    out = tmp_path / "lab"
+    make(str(zpath), str(out), 7, ["main"], make_config(), "tasks")
+    guide = (out / "for_raters" / "guide.md").read_text(encoding="utf-8")
+    assert "Undeterminable" in guide and "判定不能" in guide and "合議" in guide and "κ" in guide
+    assert "Undeterminable" in (out / "for_raters" / "index.html").read_text(encoding="utf-8")
