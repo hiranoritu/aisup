@@ -214,7 +214,12 @@ def test_AP_self_explain_post_response_and_grading(tmp_path):
     with pytest.raises(BadRequest):
         s.run_code("int main(void){}", "")
     res = s.support_answer(sup["opportunity_id"], "p は a のアドレスを持っていて *p で値を読む")
-    assert res["done"] and res["result"]["correct"] is True and res["result"]["unmet"] == []
+    assert res["done"] and res["result"]["unmet"] == [] and "correct" not in res["result"]   # 正誤は学習者に返さない
+    assert "correct" not in json.dumps(res["state"]["support"]["results"])
+    rec = events_of(app, s, "SUPPORT_ANSWER")[-1].payload["result"]
+    assert rec["correct"] is True and rec["met_count"] == rec["rubric_n"] == len(rec["met"])   # 記録には残す
+    shown = events_of(app, s, "SUPPORT_SHOWN")[-1].payload
+    assert shown["key"]["rubric"] and shown["key"]["model_answer"] is not None              # 観点は記録に残る
     s.support_end(sup["opportunity_id"], "completed")
     assert s.support is None
     end = events_of(app, s, "SUPPORT_END")[-1]
@@ -249,7 +254,9 @@ def test_wrong_answer_hint_retry_then_done(tmp_path):
     with pytest.raises(BadRequest):
         s.support_hint(opp)                    # ヒントは1回
     r2 = s.support_answer(opp, "値を読む2")
-    assert r2["done"] and r2["result"]["correct"] is False
+    assert r2["done"] and "correct" not in r2["result"] and r2["result"]["met_count"] == 1
+    rec = events_of(app, s, "SUPPORT_ANSWER")[-1].payload["result"]
+    assert rec["correct"] is False and rec["met_count"] == 1 and rec["rubric_n"] == 2
     with pytest.raises(BadRequest):
         s.support_answer(opp, "3回目")
     s.support_end(opp, "completed")

@@ -276,14 +276,16 @@ def grade_text_llm(llm: LLMClient, prompt: Prompt, public: dict, key: dict, answ
                            rubric="\n".join(f"{i}: {r}" for i, r in enumerate(rubric)), answer=answer)
     res = llm.complete("grade", msgs, json_mode=True, timeout_s=timeout_s)
     if not res.ok:
-        return res, {"correct": None, "error": "llm_failed"}
+        return res, {"correct": None, "error": "llm_failed", "met_count": None, "rubric_n": len(rubric)}
     try:
         obj = parse_json_text(res.text)
         crit = {int(c["index"]): int(c["met"]) for c in obj["criteria"]}
         if set(crit) != set(range(len(rubric))) or not set(crit.values()) <= {0, 1}:
             raise ValueError("criteria mismatch")
     except (ValueError, KeyError, TypeError) as e:
-        return res, {"correct": None, "error": f"grade_parse_error:{e}"}
+        return res, {"correct": None, "error": f"grade_parse_error:{e}", "met_count": None, "rubric_n": len(rubric)}
     met = [rubric[i] for i in range(len(rubric)) if crit[i] == 1]
     unmet = [rubric[i] for i in range(len(rubric)) if crit[i] == 0]
-    return res, {"correct": not unmet, "met": met, "unmet": unmet, "feedback": str(obj.get("feedback", ""))}
+    # correct（全観点を満たした）は記録と再挑戦の判断に使い、学習者には見せない（2026-11-24 決定）
+    return res, {"correct": not unmet, "met": met, "unmet": unmet, "met_count": len(met), "rubric_n": len(rubric),
+                 "feedback": str(obj.get("feedback", ""))}

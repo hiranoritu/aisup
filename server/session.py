@@ -380,7 +380,7 @@ class ParticipantSession:
         return {"opportunity_id": s["opportunity_id"], "support_type": s["support_type"],
                 "timing": s.get("timing"), "public": s["public"], "attempts": s["attempts"],
                 "hint_used": s["hint_used"], "hint": key.get("hint") if s["hint_used"] else None,
-                "done": s["done"], "results": s["results"],
+                "done": s["done"], "results": [public_result(s["public"]["kind"], r) for r in s["results"]],
                 "deadline_t": s["shown_t"] + self.app.server_cfg["support"]["max_duration_s"],
                 "now_t": self.clock(), "response_id": s.get("response_id")}
 
@@ -917,7 +917,7 @@ class ParticipantSession:
             s = self._require_support(opportunity_id)
             self.emit("SUPPORT_ANSWER", {"opportunity_id": opportunity_id, "attempt": attempt, "answer": answer,
                                          "result": result, "done": done, **extra})
-            return {"result": result, "done": done}
+            return {"result": public_result(kind, result), "done": done}
 
     def _final_feedback(self, s: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
         """終了時に見せる情報（正誤フィードバックの後に終了）。"""
@@ -1032,3 +1032,11 @@ def _validate_answer(item: dict[str, Any], ans: Any) -> None:
 
 
 __all__ = ["ParticipantSession", "Busy", "BadRequest", "NotSynced", "OtherPage", "LLM_SUPPORT_TYPES"]
+
+
+def public_result(kind: str, r: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """学習者に返す採点結果。記述式（LLM 採点）は正誤を出さず、満たせた観点とまだ触れていない観点だけを返す。"""
+    if r is None or kind != "text" or r.get("self_assess"):
+        return r
+    return {k: r.get(k) for k in ("met", "unmet", "feedback", "met_count", "rubric_n") if k in r} | (
+        {"graded": False} if r.get("error") else {"graded": True})

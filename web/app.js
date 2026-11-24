@@ -458,12 +458,17 @@ function renderText(sp, body, act, last) {
           endSupport(sp, "completed");
         } }));
       }
+    } else if (last.graded === false) {
+      body.append(el("div", { class: "note", text: "回答を確認できませんでした。" }));
+      if (!sp.done) body.append(el("div", { class: "note", text: "もう一度送れます。" }));
     } else {
-      body.append(verdict(last));
-      if (last.met && last.met.length) body.append(el("div", { text: "満たしている観点: " + last.met.join("／") }));
-      if (last.unmet && last.unmet.length) body.append(el("div", { text: "足りない観点: " + last.unmet.join("／") }));
+      // 正誤は表示しない（2026-11-24 決定）。満たせた観点と、まだ触れていない観点を示す
+      const list = (title, items) => el("div", { class: "rubric" }, el("div", { class: "q", text: title }),
+        el("ul", {}, ...items.map((t) => el("li", { text: t }))));
+      if (last.met && last.met.length) body.append(list("満たせた観点", last.met));
+      if (last.unmet && last.unmet.length) body.append(list("まだ触れていない観点", last.unmet));
       if (last.feedback) body.append(el("div", { class: "hint", text: last.feedback }));
-      if (!sp.done) body.append(el("div", { class: "note", text: "書き直して、もう一度送れます（再挑戦は1回）。" }));
+      if (!sp.done && last.unmet && last.unmet.length) body.append(el("div", { class: "note", text: "書き足して、もう一度送れます（再挑戦は1回）。" }));
     }
   }
   if (!sp.done) act.append(el("button", { class: "primary", type: "button", text: "回答する", onclick: () => {
