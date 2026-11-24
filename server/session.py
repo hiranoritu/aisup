@@ -635,6 +635,7 @@ class ParticipantSession:
                     p["opportunity_id"] = self.support.get("opportunity_id")
         elif typ == "PASTE_BLOCKED":
             p = {k: p.get(k) for k in ("client_seq", "client_t", "page_id", "server_recv_t", "length", "via")}
+            p["via"] = str(p.get("via") or "")[:40]     # 欄の種類（editor / chat / support_text / test_text など）:paste|drop
         self._new_event(f"c{seq}", typ, p, None)
 
     def _normalize_edit(self, p: dict[str, Any]) -> dict[str, Any]:

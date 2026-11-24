@@ -131,6 +131,14 @@ def test_paste_blocked_records_length_only_and_flags_cycle(tmp_path):
     assert f["blocked_pastes"] == 1 and f["contamination_suspected"] is True
 
 
+def test_paste_blocked_is_recorded_in_tests_with_field_kind(tmp_path):
+    app = make_app(tmp_path, Script())
+    s = start(app, "adaptive", phase="pretest")
+    cev(s, [{"type": "PASTE_BLOCKED", "payload": {"length": 40, "via": "test_text:paste"}}])
+    e = events_of(app, s, "PASTE_BLOCKED")[-1]
+    assert e.payload["via"] == "test_text:paste" and e.payload["length"] == 40
+
+
 def test_editor_internal_paste_is_accepted(tmp_path):
     script = Script()
     app = make_app(tmp_path, script)

@@ -443,6 +443,7 @@ function renderChoice(sp, body, act, last) {
 
 function renderText(sp, body, act, last) {
   const ta = el("textarea", { rows: 4, placeholder: "自分の言葉で説明してください", disabled: sp.done });
+  guardPaste(ta, "support_text");          // 記述式の回答欄（2026-11-24 決定）
   body.append(ta);
   if (last) {
     if (last.self_assess) {
@@ -480,7 +481,7 @@ function renderCode(sp, body, act, last) {
   stdin.value = p.tests[0] || "";
   const out = el("pre", { class: "output", style: "height:auto;max-height:20vh" });
   body.append(ed, el("div", { class: "note", text: "標準入力（試し実行用）" }), stdin);
-  guardPaste(ed, "support");
+  guardPaste(ed, "support_code");
   const edHL = attachHighlight(ed);
   edHL.wrap.classList.add("mini");
   body.append(out);
@@ -513,6 +514,7 @@ function renderClarify(sp, body, act) {
   body.append(box);
   body.append(el("label", { class: "q", for: "cl-sentence", text: "今いちばん知りたいことを一文で書いてください" }));
   const ta = el("textarea", { id: "cl-sentence", rows: 2 });
+  guardPaste(ta, "clarify_sentence");      // P-A の一文（2026-11-24 決定）
   body.append(ta);
   const choice = () => { const v = box.querySelector("input:checked"); return v ? Number(v.value) : null; };
   if (S.settings.allow_skip) act.append(el("button", { type: "button", text: "スキップ（原文のまま送る）", onclick: () => clarifySend(sp, "skipped") }));

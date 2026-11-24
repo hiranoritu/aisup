@@ -107,7 +107,9 @@ function renderForm(S) {
   box.textContent = "";
   Object.keys(formDraft).forEach((k) => delete formDraft[k]);
   Object.assign(formDraft, inst.answers || {});
-  inst.items.forEach((it, idx) => box.append(formItem(it, idx)));
+  // 事前・事後テストは全回答欄、質問紙はコード欄だけ外部からの貼り付けを遮断する（自由記述は制限しない）
+  const kind = S.phase && S.phase.kind;
+  inst.items.forEach((it, idx) => box.append(formItem(it, idx, kind)));
   $("form-confirm").hidden = true;
   $("form-submit").hidden = false;
   $("form-submit").onclick = () => { $("form-confirm").hidden = false; $("form-submit").hidden = true; };
@@ -115,7 +117,7 @@ function renderForm(S) {
   $("form-final").onclick = () => saveForm(true);
 }
 
-function formItem(it, idx) {
+function formItem(it, idx, kind) {
   const wrap = el("fieldset", { class: "item" });
   wrap.append(el("legend", { text: `${idx + 1}. ${it.prompt}${it.required ? "（必須）" : ""}` }));
   if (it.code) { const pre = el("pre", { class: "src" }); highlightInto(pre, it.code); wrap.append(pre); }
@@ -154,8 +156,9 @@ function formItem(it, idx) {
     ta.value = typeof cur === "string" ? cur : (it.starter || "");
     ta.oninput = () => set(ta.value);
     wrap.append(ta);
+    if (kind === "test") guardPaste(ta, it.type === "code" ? "test_code" : "test_text");
+    else if (it.type === "code") guardPaste(ta, "questionnaire_code");
     if (it.type === "code") {
-      guardPaste(ta, "form");
       const hl = attachHighlight(ta);
       hl.wrap.classList.add("mini");
     }
