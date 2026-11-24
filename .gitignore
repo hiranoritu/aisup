@@ -5,3 +5,5 @@ out/
 data/
 .venv/
 deploy/.env
+.env
+*.env.local
