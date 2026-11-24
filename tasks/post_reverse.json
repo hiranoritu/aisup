@@ -1,8 +1,8 @@
 {
   "task_id": "post_reverse",
   "phase": "post",
-  "title": "後続課題：配列を逆順に並べ替える関数",
-  "description": "関数 `reverse` を完成させ、配列 arr（要素数 n）の要素を逆順に並べ替えてください（新しい配列は作らない）。\nmain は n と n 個の整数を読み込み、並べ替えた結果を空白区切りで表示します。\n\n入力例:\n```\n4\n1 2 3 4\n```\n出力例:\n```\n4 3 2 1\n```",
+  "title": "後続課題1：配列を逆順に並べ替える関数",
+  "description": "関数 `reverse` を完成させ、配列 arr（要素数 n）の要素をその場で逆順に並べ替えてください（別の配列は作らない）。\nmain は並べ替えた結果を空白区切りで表示します。\n\n- 1 ≤ n ≤ 100\n\n入力例:\n```\n4\n1 2 3 4\n```\n出力例:\n```\n4 3 2 1\n```",
   "concepts": [
     "配列とポインタ",
     "ポインタによる要素の入れ替え"
@@ -15,8 +15,9 @@
   "reference_solution": "#include <stdio.h>\n\nvoid reverse(int *arr, int n) {\n    int *l = arr;\n    int *r = arr + n - 1;\n    while (l < r) {\n        int tmp = *l;\n        *l = *r;\n        *r = tmp;\n        l++;\n        r--;\n    }\n}\n\nint main(void) {\n    int n;\n    int a[100];\n    if (scanf(\"%d\", &n) != 1 || n < 1 || n > 100) return 1;\n    for (int i = 0; i < n; i++) scanf(\"%d\", &a[i]);\n    reverse(a, n);\n    for (int i = 0; i < n; i++) printf(\"%d%c\", a[i], i == n - 1 ? '\\n' : ' ');\n    return 0;\n}\n",
   "sample_inputs": [
     "4\n1 2 3 4\n",
-    "1\n9\n"
+    "1\n9\n",
+    "5\n5 -1 0 8 2\n"
   ],
   "variation_seeds": [],
-  "placeholder": true
+  "placeholder": false
 }

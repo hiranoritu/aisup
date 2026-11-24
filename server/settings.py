@@ -59,13 +59,17 @@ DEFAULT_SERVER_CONFIG: dict[str, Any] = {
     },
     "tasks_dir": "tasks",
     # 課題の順序（導入共通活動 → 主課題 → 支援停止後の後続課題）
-    "task_sequence": ["intro_sum", "main_swap", "main_minmax", "post_reverse"],
+    "task_sequence": ["intro_sum", "main_swap", "main_minmax", "main_count", "post_reverse", "post_divmod"],
     "snapshot_interval_s": 10,
     # 教材（画面上部の教材バーに並ぶ順）。file は Markdown（materials/ 以下）。
     # phases を指定するとそのフェーズの課題中だけ表示する（省略時は常に表示）。
     "materials": [
         {"id": "howto", "title": "この学習環境の使い方", "file": "materials/howto.md"},
-        {"id": "pointer_basics", "title": "ポインタの基本（仮）", "file": "materials/pointer_basics.md"},
+        {"id": "pointer_basics", "title": "ポインタの基本", "file": "materials/pointer_basics.md",
+         "phases": ["main", "post"]},
+        {"id": "strings_pointers", "title": "文字列とポインタ", "file": "materials/strings_pointers.md",
+         "phases": ["main", "post"]},
+        {"id": "errors", "title": "エラーメッセージの読み方", "file": "materials/errors.md"},
     ],
 }
 

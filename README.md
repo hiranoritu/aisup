@@ -29,7 +29,8 @@ server/                  サーバ（Python 標準ライブラリのみ）
   tasks.py / render.py   課題メタデータ／AI 回答のコードブロック分割（block_id は engine と同じ採番）
 sandbox/                 実行用 Docker イメージ（Dockerfile, runner.py）
 web/                     学習者画面（index.html, app.js）と管理画面（admin.html, admin.js）
-tasks/                   課題メタデータ（**仮の課題**。placeholder: true）
+tasks/                   課題メタデータ（導入1・主課題3・後続課題2。要確認の初版）
+materials/               教材（Markdown。画面上部の教材バーに表示、閲覧は MATERIAL_VIEW で記録）
 prompts/                 学習者用AI・特徴抽出・支援生成・記述採点のプロンプト（版＝内容のハッシュを記録）
 tests/                   受け入れ条件（§10）、特徴量、サーバ、実サンドボックスのテスト
 examples/sample_events.jsonl
@@ -116,7 +117,7 @@ python -m server --config server_config.json --data data/ --host 0.0.0.0 --port 
 - [ ] **実ブラウザでの確認**：日本語入力（IME）、取り消し、コピー→貼り付けの由来、支援オーバーレイの各型、タイマー、課題切替。
 - [ ] **OpenAI 実接続**：モデル名の決定（§13-6）と、特徴抽出・支援生成・採点プロンプトの試行。
 - [ ] **質問特徴抽出の人手ラベルとの一致確認**（`prompts/prompt_features.md`）。
-- [ ] **課題の差し替え**：`tasks/*.json` は仮。重要概念・変形の種・参照解を本番の課題にする。
+- [ ] **課題・教材の確認**：`tasks/*.json`（6問）と `materials/*.md`（4本）は初版。研究者が内容・難易度・所要時間を確認する。参照解と教材のコード例はサンドボックスで検証済み（`tests/test_sandbox.py`）。
 - [ ] §13-1 案B（スレッド返信UIで新規／確認を決める方式）は未実装（エンジン側の切替が必要）。
 - [ ] 本実験前の凍結：`engine/config.py` の `rule_version`、`server_config` のハッシュ、プロンプトの版、サンドボックスイメージを記録して固定する。
 - [ ] Tree-sitter 版 S の未決事項（上記）。

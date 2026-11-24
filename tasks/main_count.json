@@ -1,0 +1,28 @@
+{
+  "task_id": "main_count",
+  "phase": "main",
+  "title": "主課題3：文字列の中の文字を数える関数",
+  "description": "関数 `count_char` を完成させてください。文字列 s の中に文字 c が何個あるかを数えて返します。\n文字列は `s[i]` の添字ではなく、**ポインタ p を 1 文字ずつ進めて**調べてください。\n\n- s は空白を含まない 99 文字以内の英数字\n- 文字列の終わりには終端文字 `'\\0'` があります\n\n入力例:\n```\nbanana a\n```\n出力例:\n```\n3\n```",
+  "concepts": [
+    "文字列と char へのポインタ",
+    "ポインタを進める p++",
+    "終端文字 '\\0'",
+    "間接参照 *"
+  ],
+  "target_functions": [
+    "count_char",
+    "main"
+  ],
+  "starter_code": "#include <stdio.h>\n\nint count_char(const char *s, char c) {\n    /* ここに書く */\n    return 0;\n}\n\nint main(void) {\n    char s[100];\n    char c;\n    scanf(\"%99s %c\", s, &c);\n    printf(\"%d\\n\", count_char(s, c));\n    return 0;\n}\n",
+  "reference_solution": "#include <stdio.h>\n\nint count_char(const char *s, char c) {\n    int count = 0;\n    for (const char *p = s; *p != '\\0'; p++) {\n        if (*p == c) count++;\n    }\n    return count;\n}\n\nint main(void) {\n    char s[100];\n    char c;\n    if (scanf(\"%99s %c\", s, &c) != 2) return 1;\n    printf(\"%d\\n\", count_char(s, c));\n    return 0;\n}\n",
+  "sample_inputs": [
+    "banana a\n",
+    "pointer z\n",
+    "aaaa a\n"
+  ],
+  "variation_seeds": [
+    "c が最初に現れる位置（添字）を返し、なければ -1 を返す find_char(const char *s, char c)",
+    "s の中の c をすべて d に置き換える replace_char(char *s, char c, char d)"
+  ],
+  "placeholder": false
+}

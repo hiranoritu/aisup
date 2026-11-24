@@ -76,6 +76,7 @@ def main():
             r["stdout"], t1 = _read_capped(f.read(cap + 1), cap)
         with open(err_path, "rb") as f:
             r["stderr"], t2 = _read_capped(f.read(cap + 1), cap)
+        r["stderr"] = r["stderr"].replace(src_path, "main.c")   # 学習者に見せるパスをそろえる
         r["truncated"] = t1 or t2
         if code is not None and code < 0:
             r["signal"] = -code

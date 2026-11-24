@@ -65,7 +65,9 @@ class Script:
 
 def make_app(tmp_path, script: Script, sandbox=None, server_overrides: Optional[dict] = None,
              clock=None) -> App:
-    cfg = make_server_config({"llm_provider": "fake", **(server_overrides or {})})
+    # 課題の並びはテスト用に固定する（本番の task_sequence を変えてもテストが壊れないように）
+    base = {"llm_provider": "fake", "task_sequence": ["intro_sum", "main_swap", "main_minmax", "post_reverse"]}
+    cfg = make_server_config({**base, **(server_overrides or {})})
     kw = {} if clock is None else {"clock": clock}
     return App(cfg, str(tmp_path), llm=FuncLLM(script, "scripted"), sandbox=sandbox or FakeSandbox(),
                admin_token="admintoken", **kw)

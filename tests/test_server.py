@@ -445,7 +445,7 @@ def test_restart_restores_state_and_replay_matches_without_llm(tmp_path):
 
     def no_llm(role, messages):
         raise AssertionError("LLM must not be called on restore/replay")
-    cfg = make_server_config({"llm_provider": "fake"})
+    cfg = app.server_cfg
     app2 = App(cfg, str(tmp_path), llm=FuncLLM(no_llm), sandbox=FakeSandbox(), admin_token="t")
     s2 = app2.session(s.pid)
     after = s2.state()
@@ -543,7 +543,7 @@ def test_material_view_is_logged_with_version(tmp_path):
     app = make_app(tmp_path, Script())
     s = start(app, "adaptive")
     ids = [m["id"] for m in s.state()["materials"]]
-    assert ids == ["howto", "pointer_basics"]
+    assert ids == ["howto", "pointer_basics", "strings_pointers", "errors"]
     s.client_events([{"type": "MATERIAL_VIEW", "payload": {"material_id": "pointer_basics", "action": "open"}},
                      {"type": "MATERIAL_VIEW", "payload": {"material_id": "pointer_basics", "action": "close"}}])
     ev = events_of(app, s, "MATERIAL_VIEW")
@@ -573,7 +573,7 @@ def test_http_material_endpoint(http_app):
     assert _req(base + "/api/material?id=howto")[0] == 403
     st, body = _req(base + "/api/material?id=pointer_basics", headers={"X-Token": p["token"]})
     m = json.loads(body)
-    assert st == 200 and m["title"] == "ポインタの基本（仮）" and "```c" in m["content"]
+    assert st == 200 and m["title"] == "ポインタの基本" and "```c" in m["content"]
     assert _req(base + "/api/material?id=x", headers={"X-Token": p["token"]})[0] == 400
     assert _req(base + "/materials/howto.md")[0] == 200
     assert _req(base + "/materials/../server/app.py")[0] == 404

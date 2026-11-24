@@ -2,23 +2,24 @@
   "task_id": "intro_sum",
   "phase": "intro",
   "title": "【導入】配列の合計",
-  "description": "整数 n と n 個の整数を読み込み、その合計を表示するプログラムを完成させてください。\nAIに質問して使い方に慣れてください（この課題は判定の2サイクルに数えません）。\n\n入力例:\n```\n3\n1 2 3\n```\n出力例:\n```\n6\n```",
+  "description": "整数 n と、続く n 個の整数を読み込み、その合計を表示するプログラムを完成させてください。\nこの課題は学習環境と AI チャットに慣れるための練習です。わからないことは AI に質問してかまいません。\n\n- 1 ≤ n ≤ 100\n\n入力例:\n```\n3\n1 2 3\n```\n出力例:\n```\n6\n```",
   "concepts": [
     "配列",
     "for文",
-    "scanf"
+    "scanf による入力"
   ],
   "target_functions": [
     "main"
   ],
   "starter_code": "#include <stdio.h>\n\nint main(void) {\n    int n;\n    int a[100];\n    /* ここに書く */\n    return 0;\n}\n",
-  "reference_solution": "#include <stdio.h>\n\nint main(void) {\n    int n;\n    int a[100];\n    int sum = 0;\n    if (scanf(\"%d\", &n) != 1) return 1;\n    for (int i = 0; i < n; i++) {\n        scanf(\"%d\", &a[i]);\n        sum += a[i];\n    }\n    printf(\"%d\\n\", sum);\n    return 0;\n}\n",
+  "reference_solution": "#include <stdio.h>\n\nint main(void) {\n    int n;\n    int a[100];\n    int sum = 0;\n    if (scanf(\"%d\", &n) != 1 || n < 1 || n > 100) return 1;\n    for (int i = 0; i < n; i++) {\n        scanf(\"%d\", &a[i]);\n        sum += a[i];\n    }\n    printf(\"%d\\n\", sum);\n    return 0;\n}\n",
   "sample_inputs": [
     "3\n1 2 3\n",
-    "1\n-5\n"
+    "1\n-5\n",
+    "4\n10 -10 7 0\n"
   ],
   "variation_seeds": [
-    "合計の代わりに平均（整数除算）を表示する"
+    "合計の代わりに平均（整数の割り算）を表示する"
   ],
-  "placeholder": true
+  "placeholder": false
 }

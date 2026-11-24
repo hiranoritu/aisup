@@ -1,0 +1,24 @@
+{
+  "task_id": "post_divmod",
+  "phase": "post",
+  "title": "後続課題2：商と余りを同時に返す関数",
+  "description": "関数 `divmod` を完成させてください。a を b で割った商を `*q` に、余りを `*r` に入れます。\nmain の「divmod を呼ぶ」の部分も書いてください。\n\n- 0 ≤ a ≤ 10000、1 ≤ b ≤ 10000\n\n入力例:\n```\n17 5\n```\n出力例:\n```\nq=3 r=2\n```",
+  "concepts": [
+    "出力引数（ポインタで結果を返す）",
+    "アドレス演算子 &",
+    "間接参照 *"
+  ],
+  "target_functions": [
+    "divmod",
+    "main"
+  ],
+  "starter_code": "#include <stdio.h>\n\nvoid divmod(int a, int b, int *q, int *r) {\n    /* ここに書く */\n}\n\nint main(void) {\n    int a, b;\n    int q, r;\n    scanf(\"%d %d\", &a, &b);\n    /* divmod を呼ぶ */\n    printf(\"q=%d r=%d\\n\", q, r);\n    return 0;\n}\n",
+  "reference_solution": "#include <stdio.h>\n\nvoid divmod(int a, int b, int *q, int *r) {\n    *q = a / b;\n    *r = a % b;\n}\n\nint main(void) {\n    int a, b;\n    int q, r;\n    if (scanf(\"%d %d\", &a, &b) != 2 || b <= 0) return 1;\n    divmod(a, b, &q, &r);\n    printf(\"q=%d r=%d\\n\", q, r);\n    return 0;\n}\n",
+  "sample_inputs": [
+    "17 5\n",
+    "4 7\n",
+    "20 4\n"
+  ],
+  "variation_seeds": [],
+  "placeholder": false
+}

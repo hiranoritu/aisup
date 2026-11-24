@@ -140,3 +140,17 @@ def test_apply_variation_expected_from_reference_run():
                       "tests": ["1 2\n", "7 -7\n"], "hint": "h"})
     g = _gen([obj]).generate("apply_variation", "o1", task, "r1", "```c\n" + task.reference_solution + "```")
     assert g.ok and g.key["expected"] == {"1 2\n": "2 1\n", "7 -7\n": "-7 7\n"}
+
+
+def test_material_code_examples_run():
+    """教材の完全なプログラム（int main を含むコード）がコンパイル・実行できる。"""
+    import glob
+    import re
+    n = 0
+    for path in glob.glob(abspath("materials/*.md")):
+        for code in re.findall(r"```c\n(.*?)```", open(path, encoding="utf-8").read(), re.S):
+            if "int main" in code:
+                v = verify_program(SB, code, [""])
+                assert v.ok, (path, v.reason)
+                n += 1
+    assert n >= 2
