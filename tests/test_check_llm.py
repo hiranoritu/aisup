@@ -32,3 +32,22 @@ def test_features_prompt_has_version_label_and_h4_definition():
     assert p.version.startswith("features-v3:")
     assert "具体的な一点" in p.system and "どこから考えればいいですか」→ h2=0" in p.system
     assert "h1=1, h4=0" in p.system and "以外" in p.system
+
+
+def test_support_burst_runs_concurrently_with_fakes():
+    import json as _json
+    from server.llm import FuncLLM
+    from server.prompts import load_prompt
+    from server.settings import make_server_config
+    from server.support import SupportGenerator
+    from server.support_load import burst
+    from server.tasks import load_task
+    from server_helpers import PROG_A, FakeSandbox
+    cfg = make_server_config({"llm_provider": "fake"})
+    sup = _json.dumps({"program": PROG_A, "stdin": "", "question": "出力は？", "expected_output": "3",
+                       "distractors": ["0", "1", "&a"], "hint": "h"})
+    llm = FuncLLM(lambda role, msgs: sup, "scripted")
+    prompts = {"trace_predict": load_prompt("prompts/support/trace_predict.md")}
+    gen = SupportGenerator(llm, prompts, FakeSandbox({"": "3\n"}), cfg)
+    rows = burst(gen, load_task("tasks/main_swap.json"), ["trace_predict"], 6, "t")
+    assert len(rows) == 6 and all(r["ok"] for r in rows) and all(r["elapsed_s"] >= 0 for r in rows)

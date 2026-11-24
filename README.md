@@ -20,6 +20,7 @@ server/                  サーバ（標準ライブラリのみ）
   allocation.py          ブロック無作為化の割付表（python -m server.allocation）
   check_llm.py           OpenAI 実接続の確認（python -m server.check_llm）
   loadtest.py            負荷試験（python -m server.loadtest）
+  support_load.py        支援生成の同時実行試験（python -m server.support_load --n 10）
   labeling.py            RQ1 の人手ラベル付け用の資料と集計（python -m server.labeling make / score）
 web/                     学習者画面（index.html, net.js, phases.js, app.js, highlight.js, materials.js）・管理画面
 sandbox/                 実行用 Docker イメージ（gcc＋ASan/UBSan）
@@ -156,6 +157,7 @@ OpenAI の確認（モデル変更時も実行）：`OPENAI_API_KEY=... python -
 - [ ] **実ブラウザでの確認**（v1.2 の画面）：同意〜終了の流れ、貼り付けの遮断、タブ離脱、再開、日本語入力、支援の各型。
 - [ ] **OpenAI 実接続**：API キーを設定して `python -m server.check_llm`。特徴抽出・支援生成・採点のプロンプトの試行と、15秒に収まるか。
 - [ ] **本番サーバでの負荷試験**（Oracle Ampere 2コア・実際の LLM）。手元（Mac・偽LLM・同時実行2）では10名×2分で実行の95%点 220ms・エラー0。
+  支援生成の同時10件（2026-11-24、Mac・実際の LLM・サンドボックス同時実行2）：自己説明 20/20 成功・中央値 7.7秒・最大 9.7秒、動作予測 20/20・最大 5.5秒、5種類混在 20/20・最大 10.2秒（自力応用）。15秒超えなし。本番サーバでも `docker compose ... exec app python -m server.support_load --n 10` で確かめる。
 - [ ] **研究者が用意するもの**：同意書（倫理審査で承認された文面）、事前・事後テスト、質問紙（`instruments/`）、課題・教材の最終確認、終了画面の文言（`completion_message`）。
 - [ ] **質問特徴抽出の人手ラベルとの一致確認**（`prompts/prompt_features.md`）。
 - [x] **人手ラベル付け用の出力**（RQ1。上記 25）。記入の手引き（`for_raters/guide.md`）の HS・RU の定義の部分は下書きなので研究者が確定させる。
