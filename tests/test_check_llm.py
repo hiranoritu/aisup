@@ -15,7 +15,7 @@ def test_scrub_hides_api_key_everywhere():
 def test_feature_cases_cover_boundaries():
     cats = {c for _, _, _, c in FEATURE_CASES}
     assert len(FEATURE_CASES) >= 20
-    for need in ("コードとヒントの両方", "エラー文だけ", "考え＋完成コード", "曖昧（確認か新規か）", "否定"):
+    for need in ("コードとヒントの両方", "エラー文だけ", "考え＋完成コード", "回答の適用範囲", "否定"):
         assert any(c.startswith(need) for c in cats)
     swap = next(e for t, e, _, _ in FEATURE_CASES if t == "swap関数のコードを全部書いてください")
     assert swap["h1"] == 1 and swap["h4"] == 0
@@ -29,9 +29,10 @@ def test_response_shapes():
 
 def test_features_prompt_has_version_label_and_h4_definition():
     p = load_prompt("prompts/prompt_features.md")
-    assert p.version.startswith("features-v4:")
+    assert p.version.startswith("features-v5:")
     assert "具体的な一点" in p.system and "どこから考えればいいですか」→ h2=0" in p.system
     assert "「ポインタってなに？」→ h2=0" in p.system and "「ポインタの * と & は何が違うの？」→ h2=1" in p.system
+    assert "適用範囲" in p.system and "「別の答えを出して」" in p.system
     assert "h1=1, h4=0" in p.system and "以外" in p.system
 
 
