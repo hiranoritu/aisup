@@ -72,7 +72,10 @@ OpenAI の確認（モデル変更時も実行）：`OPENAI_API_KEY=... python -
 2. **DNS**：独自ドメインの A レコードをインスタンスの公開IPに向ける。
 3. **サーバ**：リポジトリを `/opt/aisup` に置き、`deploy/env.example` を `deploy/.env` にコピーして値を入れ、`sudo bash deploy/setup_server.sh`。
    Docker・ファイアウォール・HTTPS（Caddy が証明書を自動取得）・毎日のバックアップ（cron 3:30）まで設定される。
-4. **割付表**：`docker compose --env-file deploy/.env exec app python -m server.allocation --blocks 10 --seed <種> --out data/allocation.csv`。種とハッシュを実験記録に残し、以後変えない。
+4. **割付表**：`docker compose --env-file deploy/.env exec app python -m server.allocation --blocks 10 --seed 20041207 --out data/allocation.csv`。
+   種は **20041207**（2026-11-24 決定）、10 ブロック・40 枠（適応20・一律20）。できた表の SHA-256 は
+   `0ab7b1eaa0d5df033d3b0c9542f7a453713f797a8527acf423690635a21cfd88`（記録上の `allocation_file_hash` は先頭12桁 `0ab7b1eaa0d5`）。
+   macOS と Linux（arm64, Python 3.12）で同じ表になることを確認済み。表示されたハッシュがこれと違えば使わない。以後変えない。
 5. **死活監視**：外部の監視サービスに `https://<ドメイン>/healthz` を登録し、停止を通知させる。`ALERT_WEBHOOK_URL`（Slack/Discord 等）を設定すると、利用上限・内部エラー・期限切れ・完了をサーバから通知する。
 6. **サーバ外へのバックアップ**：研究室の PC で `deploy/pull_backup.sh ubuntu@<ドメイン> ~/aisup_backups` を毎日実行する（cron / launchd）。取り込んだ最新のバックアップを開いてイベント数を表示する。参加者が全フェーズに到達した時点でもサーバ内にバックアップを作る。
 7. **負荷試験**（本番データと分けて行う）：`python -m server.loadtest --url https://<ドメイン> --admin-token ... --n 10 --minutes 5`。
@@ -151,5 +154,5 @@ OpenAI の確認（モデル変更時も実行）：`OPENAI_API_KEY=... python -
 - [ ] **研究者が用意するもの**：同意書（倫理審査で承認された文面）、事前・事後テスト、質問紙（`instruments/`）、課題・教材の最終確認、終了画面の文言（`completion_message`）。
 - [ ] **質問特徴抽出の人手ラベルとの一致確認**（`prompts/prompt_features.md`）。
 - [x] **人手ラベル付け用の出力**（RQ1。上記 25）。記入の手引き（`for_raters/guide.md`）の HS・RU の定義の部分は下書きなので研究者が確定させる。
-- [ ] **割付表の作成**：研究者が決めた種で `--blocks 10`（40 コード）。種とハッシュを記録する。
+- [ ] **割付表の作成**：本番サーバで種 20041207・`--blocks 10` で作り、ハッシュが上の値と一致することを確かめる（予備実験は別の表・別のデータディレクトリで）。
 - [ ] **本実験前の凍結**（予備実験の後）：`rule_version`（現在 `v1.2-dev.2`）、`server_config` のハッシュ、プロンプト・教材・同意書・テストの版、割付表のハッシュ、サンドボックスイメージを記録して固定する。
