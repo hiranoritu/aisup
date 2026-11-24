@@ -5,7 +5,7 @@
   `## user…` の節                    → user メッセージのテンプレート
   それ以外の節（運用メモなど）は送らない。
 テンプレートの `{name}` は render() に渡したキーだけを置換する（コード中の波括弧は触らない）。
-版はファイル内容の SHA-256 先頭12桁。LLM_CALL に記録する。
+版はファイル内容の SHA-256 先頭12桁。ファイルに「版: <名前>」の行があれば「<名前>:<ハッシュ>」とする。LLM_CALL に記録する。
 """
 from __future__ import annotations
 
@@ -41,6 +41,9 @@ def load_prompt(path: str) -> Prompt:
     with open(path, encoding="utf-8") as f:
         text = f.read()
     version = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    m = re.search(r"^版:\s*([A-Za-z0-9_.-]+)", text, re.M)
+    if m:
+        version = f"{m.group(1)}:{version}"
     sections: list[tuple[str, list[str]]] = []
     for line in text.splitlines():
         m = re.match(r"^## (.+)$", line)
