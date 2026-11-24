@@ -29,8 +29,9 @@ def test_response_shapes():
 
 def test_features_prompt_has_version_label_and_h4_definition():
     p = load_prompt("prompts/prompt_features.md")
-    assert p.version.startswith("features-v3:")
+    assert p.version.startswith("features-v4:")
     assert "具体的な一点" in p.system and "どこから考えればいいですか」→ h2=0" in p.system
+    assert "「ポインタってなに？」→ h2=0" in p.system and "「ポインタの * と & は何が違うの？」→ h2=1" in p.system
     assert "h1=1, h4=0" in p.system and "以外" in p.system
 
 
