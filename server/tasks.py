@@ -18,9 +18,10 @@ class Task:
     target_functions: list[str]
     starter_code: str
     reference_solution: str
-    sample_inputs: list[str] = field(default_factory=list)
+    sample_inputs: list[str] = field(default_factory=list)    # 公開する採点用入力（入出力例と同じもの）
     variation_seeds: list[str] = field(default_factory=list)
     placeholder: bool = False
+    hidden_inputs: list[str] = field(default_factory=list)    # 公開しない採点用入力（期待出力は参照解の実行結果）
 
     def public(self) -> dict:
         """学習者に見せる部分（参照解・変形の種は出さない）。"""
@@ -35,6 +36,16 @@ def load_task(path: str) -> Task:
     if t.phase not in PHASES:
         raise ValueError(f"{path}: phase must be one of {PHASES}")
     return t
+
+
+def task_ids_from_phases(phases: list[dict]) -> list[str]:
+    out: list[str] = []
+    for ph in phases:
+        for tid in ph.get("tasks", []):
+            if tid in out:
+                raise ValueError(f"task {tid} appears twice in phases")
+            out.append(tid)
+    return out
 
 
 def load_tasks(tasks_dir: str, sequence: list[str]) -> list[Task]:

@@ -56,10 +56,38 @@ DEFAULT_SERVER_CONFIG: dict[str, Any] = {
         "wall_s": 3.0,
         "cpu_s": 2,
         "output_bytes": 65536,
+        "max_concurrent": 2,       # Oracle Always Free（2 OCPU）に合わせる。負荷試験で見直す
+        "queue_timeout_s": 60,
     },
     "tasks_dir": "tasks",
-    # 課題の順序（導入共通活動 → 主課題 → 支援停止後の後続課題）
-    "task_sequence": ["intro_sum", "main_swap", "main_minmax", "main_count", "post_reverse", "post_divmod"],
+    # 実験の流れ（仕様 v1.2 §15.1）。time_limit_s は実時間（中断中も減る。§15.4 既定）。null は上限なし。
+    # tasks フェーズの課題は順番に進み、提出して自動採点に合格するまで次へ進めない。課題ごとの上限はない。
+    # 上限の値は予備実験の後で固定する（§15.3）。ここの値は仮。
+    "phases": [
+        {"id": "consent", "kind": "consent", "time_limit_s": None, "doc": "instruments/consent.md"},
+        {"id": "envcheck", "kind": "envcheck", "time_limit_s": None},
+        {"id": "intro", "kind": "tasks", "time_limit_s": 600, "tasks": ["intro_sum"]},
+        {"id": "pretest", "kind": "test", "time_limit_s": 600, "instrument": "instruments/pretest.json"},
+        {"id": "main", "kind": "tasks", "time_limit_s": 3000, "tasks": ["main_swap", "main_minmax", "main_count"]},
+        {"id": "post", "kind": "tasks", "time_limit_s": 1500, "tasks": ["post_reverse", "post_divmod"]},
+        {"id": "posttest", "kind": "test", "time_limit_s": 600, "instrument": "instruments/posttest.json"},
+        {"id": "questionnaire", "kind": "questionnaire", "time_limit_s": None,
+         "instrument": "instruments/questionnaire.json"},
+    ],
+    "session": {
+        "expiry_s": 86400,           # 最初に開いてからこの秒数で無効（§13-10）
+        "resume_notice_s": 1800,     # これを超える中断は over_limit として記録（再開は認める。§13-10）
+        "gap_timeout_s": 30,         # 連番の欠落がこの秒数埋まらなければ CLIENT_GAP（§2）
+        "tick_s": 2,                 # 時間上限・期限の確認間隔
+    },
+    # 参加者ごとの LLM 利用上限（§15.6）。on_limit: "notify"（実験者に通知のみ）/ "block"（質問を止める）
+    "llm_limits": {"max_questions": 80, "max_cost_usd": 2.0, "on_limit": "notify"},
+    # 料金（USD / 100万トークン：[入力, 出力]）。費用の見積もりに使う
+    "llm_prices": {"gpt-6.2-sol": [2.0, 10.0], "gpt-6.1-terra": [1.0, 5.0], "gpt-6-luna": [0.1, 0.5],
+                   "gpt-6.2-astra": [8.0, 40.0]},
+    # ブロック無作為化の割付表（§15.5）。python -m server.allocation で作り、凍結する
+    "allocation_file": "data/allocation.csv",
+    "completion_message": "すべてのフェーズが終わりました。ご協力ありがとうございました。このページを閉じてかまいません。",
     "snapshot_interval_s": 10,
     # 教材（画面上部の教材バーに並ぶ順）。file は Markdown（materials/ 以下）。
     # phases を指定するとそのフェーズの課題中だけ表示する（省略時は常に表示）。

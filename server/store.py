@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS participants (
     token TEXT NOT NULL UNIQUE,
     grp TEXT NOT NULL,
     created_t REAL NOT NULL,
-    note TEXT NOT NULL DEFAULT ''
+    note TEXT NOT NULL DEFAULT '',
+    slot INTEGER
 );
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events
     BEGIN SELECT RAISE(ABORT, 'events is append-only'); END;
@@ -49,6 +50,9 @@ class EventStore:
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("PRAGMA synchronous=FULL")
         self._db.executescript(_SCHEMA)
+        cols = {r[1] for r in self._db.execute("PRAGMA table_info(participants)")}
+        if "slot" not in cols:   # 古い開発用データベースに列を足す（既存行は変更しない）
+            self._db.execute("ALTER TABLE participants ADD COLUMN slot INTEGER")
 
     def append(self, ev: Event) -> None:
         with self._lock:
@@ -65,15 +69,17 @@ class EventStore:
                 " WHERE participant_id=? ORDER BY seq", (participant_id,)).fetchall()
         return [Event(r[0], r[1], r[2], r[3], r[4], json.loads(r[5]), bool(r[6])) for r in rows]
 
-    def add_participant(self, participant_id: str, token: str, group: str, t: float, note: str = "") -> None:
+    def add_participant(self, participant_id: str, token: str, group: str, t: float, note: str = "",
+                        slot: Optional[int] = None) -> None:
         with self._lock:
-            self._db.execute("INSERT INTO participants VALUES (?,?,?,?,?)", (participant_id, token, group, t, note))
+            self._db.execute("INSERT INTO participants (participant_id, token, grp, created_t, note, slot)"
+                             " VALUES (?,?,?,?,?,?)", (participant_id, token, group, t, note, slot))
 
     def participants(self) -> list[dict[str, Any]]:
         with self._lock:
             rows = self._db.execute(
-                "SELECT participant_id, token, grp, created_t, note FROM participants ORDER BY created_t").fetchall()
-        return [dict(participant_id=r[0], token=r[1], group=r[2], created_t=r[3], note=r[4]) for r in rows]
+                "SELECT participant_id, token, grp, created_t, note, slot FROM participants ORDER BY created_t").fetchall()
+        return [dict(participant_id=r[0], token=r[1], group=r[2], created_t=r[3], note=r[4], slot=r[5]) for r in rows]
 
     def participant_by_token(self, token: str) -> Optional[dict[str, Any]]:
         return next((p for p in self.participants() if p["token"] == token), None)

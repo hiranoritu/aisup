@@ -1,0 +1,16 @@
+{
+  "_comment": "見本。研究者が用意した事前テストに差し替えること。answer/points は採点用で、画面には送らない。",
+  "title": "事前テスト（見本）",
+  "intro": "AIは使えません。わからない問題は空欄のままでかまいません。成績評価には使いません。",
+  "items": [
+    {"id": "pre1", "type": "choice", "required": false,
+     "prompt": "次のプログラムを実行すると何が表示されますか。",
+     "code": "#include <stdio.h>\n\nvoid f(int x) {\n    x = x + 1;\n}\n\nint main(void) {\n    int a = 5;\n    f(a);\n    printf(\"%d\\n\", a);\n    return 0;\n}\n",
+     "choices": ["5", "6", "コンパイルエラー", "わからない"], "answer": 0},
+    {"id": "pre2", "type": "choice", "required": false,
+     "prompt": "int a = 3; のとき、&a が表すものはどれですか。",
+     "choices": ["a の値（3）", "a のアドレス", "a の2倍", "わからない"], "answer": 1},
+    {"id": "pre3", "type": "text", "required": false,
+     "prompt": "関数の中で、呼び出し元の変数の値を書き換えたいとき、どうすればよいと思いますか。思いつくことを書いてください。"}
+  ]
+}

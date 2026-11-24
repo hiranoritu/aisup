@@ -11,7 +11,7 @@ from server.prompts import load_prompt
 from server.sandbox import DockerSandbox, verify_program
 from server.settings import abspath, make_server_config
 from server.support import SupportGenerator
-from server.tasks import load_tasks
+from server.tasks import load_tasks, task_ids_from_phases
 
 SB = DockerSandbox()
 pytestmark = pytest.mark.skipif(not SB.available(), reason="Docker か sandbox イメージ（aisup-sandbox:1）がない")
@@ -105,8 +105,8 @@ def test_verify_rejects(src, reason):
 # ---------------------------------------------------------------- 課題メタデータ
 def test_task_reference_solutions_verify():
     cfg = make_server_config()
-    for t in load_tasks(abspath(cfg["tasks_dir"]), cfg["task_sequence"]):
-        v = verify_program(SB, t.reference_solution, t.sample_inputs)
+    for t in load_tasks(abspath(cfg["tasks_dir"]), task_ids_from_phases(cfg["phases"])):
+        v = verify_program(SB, t.reference_solution, t.sample_inputs + t.hidden_inputs)
         assert v.ok, (t.task_id, v.reason)
         assert run1(t.starter_code).compile["ok"], t.task_id
 
@@ -121,7 +121,7 @@ def _gen(responses):
 
 def test_predict_regenerates_once_then_uses_execution_result():
     cfg = make_server_config()
-    task = load_tasks(abspath(cfg["tasks_dir"]), cfg["task_sequence"])[1]
+    task = load_tasks(abspath(cfg["tasks_dir"]), task_ids_from_phases(cfg["phases"]))[1]
     bad = json.dumps({"program": '#include <stdio.h>\nint main(void){int a; printf("%p\\n",(void*)&a);return 0;}',
                       "stdin": "", "question": "?", "distractors": ["1", "2", "3"]})
     good = json.dumps({"program": task.reference_solution, "stdin": "3 5\n", "question": "出力は？",
@@ -135,7 +135,7 @@ def test_predict_regenerates_once_then_uses_execution_result():
 
 def test_apply_variation_expected_from_reference_run():
     cfg = make_server_config()
-    task = load_tasks(abspath(cfg["tasks_dir"]), cfg["task_sequence"])[1]
+    task = load_tasks(abspath(cfg["tasks_dir"]), task_ids_from_phases(cfg["phases"]))[1]
     obj = json.dumps({"task": "t", "starter_code": task.starter_code, "reference_solution": task.reference_solution,
                       "tests": ["1 2\n", "7 -7\n"], "hint": "h"})
     g = _gen([obj]).generate("apply_variation", "o1", task, "r1", "```c\n" + task.reference_solution + "```")
@@ -154,3 +154,24 @@ def test_material_code_examples_run():
                 assert v.ok, (path, v.reason)
                 n += 1
     assert n >= 2
+
+
+def test_queue_limits_concurrency():
+    """同時実行数を超えた分は待ち行列で待つ（v1.2 §15.6）。"""
+    import threading
+    from server.sandbox import SandboxConfig
+    sb = DockerSandbox(SandboxConfig(max_concurrent=1))
+    peak = []
+    outs = []
+
+    def go():
+        o = sb.run("#include <unistd.h>\nint main(void){usleep(300000); return 0;}", [""])
+        outs.append(o)
+        peak.append(sb.running)
+    ths = [threading.Thread(target=go) for _ in range(3)]
+    for t in ths:
+        t.start()
+    for t in ths:
+        t.join()
+    assert all(o.ok for o in outs) and max(peak) <= 1
+    assert sorted(o.wait_ms > 200 for o in outs) == [False, True, True]   # 後の2つは前の終了を待った

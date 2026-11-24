@@ -24,5 +24,10 @@
     "c が最初に現れる位置（添字）を返し、なければ -1 を返す find_char(const char *s, char c)",
     "s の中の c をすべて d に置き換える replace_char(char *s, char c, char d)"
   ],
-  "placeholder": false
+  "placeholder": false,
+  "hidden_inputs": [
+    "abcabc b\n",
+    "x x\n",
+    "Mississippi s\n"
+  ]
 }

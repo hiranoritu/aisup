@@ -24,5 +24,9 @@
     "合計も *sum で返す min_max_sum(const int *arr, int n, int *min, int *max, int *sum)",
     "最大値の添字を *idx で返す argmax(const int *arr, int n, int *idx)"
   ],
-  "placeholder": false
+  "placeholder": false,
+  "hidden_inputs": [
+    "3\n7 7 1\n",
+    "6\n-1 4 -9 12 0 3\n"
+  ]
 }

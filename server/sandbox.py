@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -30,6 +32,8 @@ class SandboxConfig:
     output_bytes: int = 65536
     compile_timeout_s: float = 20.0
     host_timeout_s: float = 60.0   # docker 起動を含む全体の上限
+    max_concurrent: int = 2        # 同時に動かすコンテナ数（CPU コア数まで。超えた分は待ち行列）
+    queue_timeout_s: float = 60.0  # 待ち行列でこれ以上待ったら諦める
 
 
 @dataclass
@@ -39,15 +43,21 @@ class RunOutcome:
     runs: list[dict[str, Any]] = field(default_factory=list)
     error: str = ""              # サンドボックス障害の理由
     image: str = ""
+    wait_ms: int = 0             # 待ち行列で待った時間
+    run_ms: int = 0              # コンテナの起動から終了まで
 
     def to_dict(self) -> dict[str, Any]:
         return {"ok": self.ok, "compile": self.compile, "runs": self.runs, "error": self.error,
-                "image": self.image}
+                "image": self.image, "wait_ms": self.wait_ms, "run_ms": self.run_ms}
 
 
 class DockerSandbox:
     def __init__(self, cfg: Optional[SandboxConfig] = None) -> None:
         self.cfg = cfg or SandboxConfig()
+        self._slots = threading.BoundedSemaphore(self.cfg.max_concurrent)
+        self._lock = threading.Lock()
+        self.waiting = 0      # 待ち行列の長さ（管理画面・負荷試験用）
+        self.running = 0
 
     def available(self) -> bool:
         try:
@@ -58,6 +68,30 @@ class DockerSandbox:
             return False
 
     def run(self, src: str, stdins: list[str]) -> RunOutcome:
+        """同時実行数を max_concurrent までに抑えて実行する（仕様 v1.2 §15.6）。"""
+        t0 = time.monotonic()
+        with self._lock:
+            self.waiting += 1
+        got = self._slots.acquire(timeout=self.cfg.queue_timeout_s)
+        with self._lock:
+            self.waiting -= 1
+            if got:
+                self.running += 1
+        wait_ms = int((time.monotonic() - t0) * 1000)
+        if not got:
+            return RunOutcome(False, {}, error="queue_timeout", image=self.cfg.image, wait_ms=wait_ms)
+        try:
+            t1 = time.monotonic()
+            out = self._run(src, stdins)
+            out.wait_ms = wait_ms
+            out.run_ms = int((time.monotonic() - t1) * 1000)
+            return out
+        finally:
+            with self._lock:
+                self.running -= 1
+            self._slots.release()
+
+    def _run(self, src: str, stdins: list[str]) -> RunOutcome:
         c = self.cfg
         name = "aisup-" + uuid.uuid4().hex[:12]
         cmd = [c.docker, "run", "--rm", "-i", "--name", name,

@@ -1,0 +1,17 @@
+{
+  "_comment": "見本。研究者が用意した事後テスト（ポインタ理解・転移）に差し替えること。",
+  "title": "事後テスト（見本）",
+  "intro": "AIは使えません。わからない問題は空欄のままでかまいません。成績評価には使いません。",
+  "items": [
+    {"id": "post1", "type": "choice", "required": false,
+     "prompt": "次のプログラムを実行すると何が表示されますか。",
+     "code": "#include <stdio.h>\n\nvoid f(int *p) {\n    *p = *p + 1;\n}\n\nint main(void) {\n    int a = 5;\n    f(&a);\n    printf(\"%d\\n\", a);\n    return 0;\n}\n",
+     "choices": ["5", "6", "a のアドレス", "わからない"], "answer": 1},
+    {"id": "post2", "type": "choice", "required": false,
+     "prompt": "int *p = &a; のあと *p = 10; を実行すると、どうなりますか。",
+     "choices": ["p が 10 になる", "a が 10 になる", "コンパイルエラーになる", "わからない"], "answer": 1},
+    {"id": "post3", "type": "code", "required": false,
+     "prompt": "2つの int の和と差を、ポインタ引数で返す関数 sum_diff(int a, int b, int *s, int *d) を書いてください。",
+     "starter": "void sum_diff(int a, int b, int *s, int *d) {\n    \n}\n"}
+  ]
+}

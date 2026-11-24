@@ -1,0 +1,22 @@
+{
+  "_comment": "見本。負担（RQ3）・必要性評価・外部AI利用の自己申告（§15.2）。研究者が用意した質問紙に差し替えること。",
+  "title": "アンケート（見本）",
+  "intro": "最後に、今日の学習についてお聞きします。正直にお答えください。回答によって不利益が生じることはありません。",
+  "items": [
+    {"id": "q_mental", "type": "scale", "min": 1, "max": 7, "required": true,
+     "prompt": "課題に取り組んでいるとき、頭をどのくらい使いましたか。", "labels": ["ほとんど使わなかった", "非常に使った"]},
+    {"id": "q_frustration", "type": "scale", "min": 1, "max": 7, "required": true,
+     "prompt": "どのくらいいらいらしたり、ストレスを感じたりしましたか。", "labels": ["まったく", "非常に"]},
+    {"id": "q_support_burden", "type": "scale", "min": 1, "max": 7, "required": true,
+     "prompt": "AIの回答の後に出た「考えてみよう」の問題は、どのくらい負担でしたか（出なかった場合は 1）。", "labels": ["負担ではなかった", "非常に負担だった"]},
+    {"id": "q_support_need", "type": "scale", "min": 1, "max": 7, "required": true,
+     "prompt": "その問題は、学ぶうえで必要だったと思いますか（出なかった場合は 4）。", "labels": ["不要だった", "必要だった"]},
+    {"id": "q_external_ai", "type": "choice", "required": true,
+     "prompt": "このシステム以外のAI（ChatGPT など）を使いましたか。使っても不利益はありません。",
+     "choices": ["使わなかった", "少し使った", "よく使った"]},
+    {"id": "q_external_other", "type": "multi", "required": false,
+     "prompt": "このシステム以外に使ったものがあれば選んでください（複数可）。",
+     "choices": ["検索エンジン", "教科書・資料", "友人に聞いた", "その他"]},
+    {"id": "q_comment", "type": "text", "required": false, "prompt": "感想や、使いにくかった点があれば書いてください。"}
+  ]
+}

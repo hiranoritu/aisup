@@ -23,7 +23,7 @@ from .prompts import load_prompt
 from .sandbox import DockerSandbox, SandboxConfig
 from .settings import abspath, load_server_config, validate_server_config
 from .support import LLM_SUPPORT_TYPES, SupportGenerator, grade_text_llm
-from .tasks import load_tasks
+from .tasks import load_tasks, task_ids_from_phases
 
 # 例文と期待値（指定したキーだけ照合する）
 FEATURE_CASES = [
@@ -66,7 +66,7 @@ def main(argv=None) -> None:
     if not all(v["ok"] for v in report["ping"].values()):
         _p("疎通に失敗した役割があります。モデル名・params（reasoning_effort 等）・response_format を見直してください。")
 
-    tasks = load_tasks(abspath(cfg["tasks_dir"]), cfg["task_sequence"])
+    tasks = load_tasks(abspath(cfg["tasks_dir"]), task_ids_from_phases(cfg["phases"]))
     task = next(t for t in tasks if t.phase == "main")
     pf = load_prompt(abspath(cfg["prompts"]["features"]))
 

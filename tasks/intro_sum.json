@@ -21,5 +21,9 @@
   "variation_seeds": [
     "合計の代わりに平均（整数の割り算）を表示する"
   ],
-  "placeholder": false
+  "placeholder": false,
+  "hidden_inputs": [
+    "5\n-1 -2 -3 -4 -5\n",
+    "2\n1000 2000\n"
+  ]
 }

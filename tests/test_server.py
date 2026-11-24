@@ -21,8 +21,8 @@ from server.llm import FuncLLM
 from server.session import BadRequest
 from server.settings import make_server_config
 
-from server_helpers import (F, PROG_A, Clock, FakeSandbox, Script, code_block, make_app, paste_from_response,
-                            start, type_at)
+from server_helpers import (F, PC_INFO, PROG_A, Clock, FakeSandbox, Script, cev, close_cycle, code_block, make_app,
+                            paste_from_response, start, to_phase, type_at)
 
 SELF_EXPLAIN = json.dumps({"lines": [4, 5], "question": "4〜5行目の役割を説明してください。",
                            "rubric": ["p が a のアドレスを持つ", "*p で a の値を読む"],
@@ -105,7 +105,7 @@ def test_paste_not_matching_copy_is_external(tmp_path):
     app = make_app(tmp_path, Script())
     s = start(app, "adaptive")
     s.submit_prompt("質問")
-    s.client_events([{"type": "COPY_FROM_AI", "payload": {"response_id": "r1", "block_id": "0", "text": "int a;"}},
+    cev(s, [{"type": "COPY_FROM_AI", "payload": {"response_id": "r1", "block_id": "0", "text": "int a;"}},
                      {"type": "CODE_EDIT", "payload": {"offset": 0, "delete_len": 0, "insert_text": "int b;",
                                                        "kind": "paste",
                                                        "source": {"type": "ai", "response_id": "r1"}}}])
@@ -118,7 +118,7 @@ def test_paste_matches_with_crlf_difference(tmp_path):
     s = start(app, "adaptive")
     s.submit_prompt("質問")
     rid = events_of(app, s, "AI_RESPONSE")[-1].payload["response_id"]
-    s.client_events([{"type": "COPY_FROM_AI", "payload": {"response_id": rid, "block_id": None, "text": "a;\r\nb;\r\n"}},
+    cev(s, [{"type": "COPY_FROM_AI", "payload": {"response_id": rid, "block_id": None, "text": "a;\r\nb;\r\n"}},
                      {"type": "CODE_EDIT", "payload": {"offset": 0, "delete_len": 0, "insert_text": "a;\nb;\n",
                                                        "kind": "paste"}}])
     assert events_of(app, s, "CODE_EDIT")[-1].payload["source"]["type"] == "ai"
@@ -128,9 +128,9 @@ def test_client_cannot_send_server_event_types(tmp_path):
     app = make_app(tmp_path, Script())
     s = start(app, "adaptive")
     with pytest.raises(BadRequest):
-        s.client_events([{"type": "SUPPORT_SHOWN", "payload": {}}])
+        cev(s, [{"type": "SUPPORT_SHOWN", "payload": {}}])
     with pytest.raises(BadRequest):
-        s.client_events([{"type": "RUN", "payload": {}}])
+        cev(s, [{"type": "RUN", "payload": {}}])
 
 
 # ---------------------------------------------------------------- 特徴抽出
@@ -143,7 +143,7 @@ def test_feature_llm_failure_is_unknown_not_passive(tmp_path):
     pf = events_of(app, s, "PROMPT_FEATURES")[-1].payload
     assert pf["ok"] is False and pf["error"].startswith("llm_failed")
     assert events_of(app, s, "AI_RESPONSE")   # 特徴抽出に失敗しても AI には送る
-    s.advance()
+    close_cycle(s)
     c = s.engine.cycles[-1]
     assert c.hs is None and c.state == "Pending"
 
@@ -185,7 +185,7 @@ def test_PA_pre_send_before_ai(tmp_path):
                                       len(types) - 1 - types[::-1].index("AI_RESPONSE"))
     assert i_shown < i_end < i_sent < i_resp
     # HS は原文（PROMPT_DRAFT_SUBMIT の文面）で判定：q3 の特徴は h2=0 → Passive
-    s.advance()
+    close_cycle(s)
     assert s.engine.cycles[-1].hs == "Passive" and s.engine.cycles[-1].intervened
 
 
@@ -208,7 +208,7 @@ def test_AP_self_explain_post_response_and_grading(tmp_path):
     types = [e.type for e in events_of(app, s)]
     assert types.index("SUPPORT_SHOWN") > len(types) - 1 - types[::-1].index("AI_RESPONSE")   # 回答の後
     # 支援中はコピー禁止（試みは記録）
-    s.client_events([{"type": "COPY_FROM_AI", "payload": {"response_id": "x", "block_id": "0", "text": "int"}}])
+    cev(s, [{"type": "COPY_FROM_AI", "payload": {"response_id": "x", "block_id": "0", "text": "int"}}])
     assert events_of(app, s, "COPY_FROM_AI")[-1].payload["blocked"] is True
     # 実行も不可
     with pytest.raises(BadRequest):
@@ -275,7 +275,7 @@ def test_generation_failure_is_infeasible_without_cooldown(tmp_path):
     s.submit_prompt("q4")
     d = s.engine.decisions[-1]
     assert d.reason != "cooldown" and d.support_type == "self_explain"   # 実施不能はクールダウンを始めない
-    s.advance()
+    close_cycle(s)
     assert not s.engine.cycles[-2].intervened
 
 
@@ -338,7 +338,7 @@ def test_support_run_is_in_support_and_excluded_from_T(tmp_path):
     s.support_end(sup["opportunity_id"], "skipped")
     paste_from_response(s)
     s.run_code(s.engine.doc.text, "")
-    s.advance()
+    close_cycle(s)
     c3 = s.engine.cycles[-1]
     assert c3.intervened and c3.features["T_runs"] == 1
 
@@ -400,7 +400,7 @@ def test_skip_respects_setting(tmp_path):
         s.support_end(opp, "skipped")
 
 
-def test_admin_advance_aborts_open_support_and_ends_session(tmp_path):
+def test_force_next_phase_aborts_support_and_session_completes(tmp_path):
     script = Script()
     script.support = lambda sysmsg, msgs: SELF_EXPLAIN
     app = make_app(tmp_path, script)
@@ -409,20 +409,24 @@ def test_admin_advance_aborts_open_support_and_ends_session(tmp_path):
     passive_cycle(s, "q2", F(h2=1), script)
     script.features["q3"] = F(h2=1)
     s.submit_prompt("q3")
-    assert s.advance() == "main_minmax"
-    assert events_of(app, s, "SUPPORT_END")[-1].payload["reason"] == "aborted"
-    assert s.advance() == "post_reverse"
-    assert s.advance() == "ended"
-    assert s.state()["ended"] and s.state()["task"] is None
+    assert s.force_next_phase() == "post"
+    end = events_of(app, s, "SUPPORT_END")[-1].payload
+    assert end["reason"] == "aborted" and end["by"] == "phase_admin"
+    assert events_of(app, s, "TASK_END")[-1].payload["reason"] == "admin"
+    assert s.task.task_id == "post_reverse"
+    to_phase(s, "questionnaire")
+    s.save_answers({"q_mental": 3, "q_frustration": 2, "q_support_burden": 1, "q_support_need": 4,
+                    "q_external_ai": 0}, final=True)
+    st = s.state()
+    assert st["status"] == "done" and st["phase"]["id"] == "questionnaire" and st["completion_message"]
+    assert events_of(app, s, "SESSION_END")[-1].payload["reason"] == "completed"
 
 
 def test_post_phase_has_no_support(tmp_path):
     script = Script()
     script.support = lambda sysmsg, msgs: SELF_EXPLAIN
     app = make_app(tmp_path, script)
-    s = start(app, "adaptive")
-    s.advance()
-    s.advance()   # post_reverse
+    s = start(app, "adaptive", phase="post")
     for q in ("p1", "p2", "p3"):
         passive_cycle(s, q, F(h2=1), script)
     assert all(d.reason == "support_disabled_phase" for d in s.engine.decisions)
@@ -506,22 +510,32 @@ def test_http_auth_and_flow(http_app):
     assert _req(base + "/api/state")[0] == 403
     assert _req(base + "/api/admin/overview")[0] == 403
     assert _req(base + "/api/admin/overview", headers={"X-Admin-Token": "wrong"})[0] == 403
-    st, body = _req(base + "/api/admin/participants", {"group": "random"}, {"X-Admin-Token": "admintoken"})
+    st, body = _req(base + "/api/admin/participants", {"group": "adaptive"}, {"X-Admin-Token": "admintoken"})
     assert st == 200
     p = json.loads(body)
-    assert p["group"] in ("adaptive", "uniform") and p["assignment"] == "random"
+    assert p["group"] == "adaptive" and p["assignment"] == "manual"
     tok = {"X-Token": p["token"]}
     st, body = _req(base + "/api/state", headers=tok)
-    assert st == 200 and json.loads(body)["task"] is None
-    _req(base + "/api/admin/advance", {"participant_id": p["participant_id"]}, {"X-Admin-Token": "admintoken"})
-    st, body = _req(base + "/api/prompt", {"text": "質問です"}, tok)
+    assert st == 200 and json.loads(body)["status"] == "not_started"
+    st, body = _req(base + "/api/hello", {"page_id": "pg", "info": PC_INFO}, tok)
+    assert json.loads(body)["state"]["phase"]["id"] == "consent"
+    _req(base + "/api/consent", {"agree": True}, tok)
+    st, body = _req(base + "/api/envcheck", {"info": PC_INFO}, tok)
+    assert json.loads(body)["state"]["phase"]["id"] == "intro"
+    st, body = _req(base + "/api/prompt", {"text": "質問です", "after_seq": 0, "page_id": "pg"}, tok)
     assert st == 200
     state = json.loads(body)["state"]
     assert state["busy"] is False and state["chat"][-1]["segments"][1]["type"] == "code"
     assert "OPENAI" not in body.decode() and "key" not in state
-    st, body = _req(base + "/api/events", {"events": [{"type": "CODE_EDIT", "payload": {"offset": 99999, "delete_len": 0,
-                                                                                           "insert_text": "x", "kind": "typed"}}]}, tok)
-    assert st == 200   # 範囲外の編集は異常として記録されるが画面は止めない
+    st, body = _req(base + "/api/events", {"page_id": "pg", "events": [
+        {"client_seq": 1, "type": "CODE_EDIT", "payload": {"offset": 99999, "delete_len": 0, "insert_text": "x", "kind": "typed"}}]}, tok)
+    assert st == 200 and json.loads(body)["acked"] == 1   # 範囲外の編集は異常として記録されるが画面は止めない
+    st, body = _req(base + "/api/run", {"code": "int main(void){return 0;}", "stdin": "", "after_seq": 2, "page_id": "pg"}, tok)
+    assert st == 409 and json.loads(body) == {"error": "not_synced", "acked": 1}
+    st, body = _req(base + "/api/run", {"code": "int main(void){return 0;}", "stdin": "", "after_seq": 1, "page_id": "pg"}, tok)
+    assert st == 200
+    st, body = _req(base + "/api/events", {"page_id": "other", "events": []}, tok)
+    assert st == 409 and json.loads(body)["error"] == "other_page"
     assert app.session(p["participant_id"]).engine.anomalies
     assert _req(base + "/api/events", {"events": "x"}, tok)[0] == 400
     st, body = _req(base + "/api/admin/export", headers={"X-Admin-Token": "admintoken"})
@@ -544,13 +558,15 @@ def test_material_view_is_logged_with_version(tmp_path):
     s = start(app, "adaptive")
     ids = [m["id"] for m in s.state()["materials"]]
     assert ids == ["howto", "pointer_basics", "strings_pointers", "errors"]
-    s.client_events([{"type": "MATERIAL_VIEW", "payload": {"material_id": "pointer_basics", "action": "open"}},
+    cev(s, [{"type": "MATERIAL_VIEW", "payload": {"material_id": "pointer_basics", "action": "open"}},
                      {"type": "MATERIAL_VIEW", "payload": {"material_id": "pointer_basics", "action": "close"}}])
     ev = events_of(app, s, "MATERIAL_VIEW")
     assert [e.payload["action"] for e in ev] == ["open", "close"]
     assert ev[0].payload["material_version"] == app.material_by_id["pointer_basics"]["version"]
-    with pytest.raises(BadRequest):
-        s.client_events([{"type": "MATERIAL_VIEW", "payload": {"material_id": "nope", "action": "open"}}])
+    # 不正な内容は拒否せず記録だけして先へ進む（拒否すると端末の送信待ちが詰まるため）
+    r = cev(s, [{"type": "MATERIAL_VIEW", "payload": {"material_id": "nope", "action": "open"}}])
+    assert r["acked"] == s.next_seq - 1
+    assert events_of(app, s, "CLIENT_INFO")[-1].payload["reason"] == "bad_payload"
     # 教材の閲覧はサイクルの判定に影響しない
     assert s.engine.anomalies == []
 
@@ -559,11 +575,9 @@ def test_materials_filtered_by_phase(tmp_path):
     app = make_app(tmp_path, Script(), server_overrides={"materials": [
         {"id": "howto", "title": "使い方", "file": "materials/howto.md"},
         {"id": "pb", "title": "ポインタ", "file": "materials/pointer_basics.md", "phases": ["main"]}]})
-    p = app.create_participant(None, "adaptive")
-    s = app.session(p["participant_id"])
-    s.advance()   # intro
+    s = start(app, "adaptive", phase="intro")
     assert [m["id"] for m in s.state()["materials"]] == ["howto"]
-    s.advance()   # main
+    to_phase(s, "main")
     assert [m["id"] for m in s.state()["materials"]] == ["howto", "pb"]
 
 

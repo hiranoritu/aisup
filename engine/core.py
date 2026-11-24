@@ -68,6 +68,11 @@ class Engine:
             return None
         return h(ev, in_support)
 
+    @property
+    def clipboard_text(self) -> Optional[str]:
+        """エディタ内で最後にコピーされた文字列（サーバが貼り付けの由来を決めるのに使う）。"""
+        return None if self._clip is None else self._clip[0]
+
     def finish(self, t: Optional[float] = None) -> None:
         """ログ末尾で開いているサイクルを閉じる（再生時）。"""
         if self.open is not None:

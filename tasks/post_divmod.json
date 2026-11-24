@@ -20,5 +20,10 @@
     "20 4\n"
   ],
   "variation_seeds": [],
-  "placeholder": false
+  "placeholder": false,
+  "hidden_inputs": [
+    "0 3\n",
+    "10000 1\n",
+    "9999 100\n"
+  ]
 }
