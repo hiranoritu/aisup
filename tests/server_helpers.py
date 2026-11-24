@@ -56,7 +56,7 @@ class Script:
         if role in self.fail_roles:
             raise TimeoutError("scripted failure")
         user = messages[-1]["content"]
-        if role == "features":
+        if role in ("features", "features_shadow"):
             q = re.search(r"学習者の質問: (.*)$", user, re.S).group(1).strip()
             return json.dumps(self.features.get(q, F(h2=1)), ensure_ascii=False)
         if role == "chat":
@@ -74,8 +74,10 @@ def make_app(tmp_path, script: Script, sandbox=None, server_overrides: Optional[
     base = {"llm_provider": "fake", "phases": TEST_PHASES, "allocation_file": None}
     cfg = make_server_config({**base, **(server_overrides or {})})
     kw = {} if clock is None else {"clock": clock}
-    return App(cfg, str(tmp_path), llm=FuncLLM(script, "scripted"), sandbox=sandbox or FakeSandbox(),
-               admin_token="admintoken", **kw)
+    app = App(cfg, str(tmp_path), llm=FuncLLM(script, "scripted"), sandbox=sandbox or FakeSandbox(),
+              admin_token="admintoken", **kw)
+    app.background = lambda fn: fn()      # 裏の処理（比較用の特徴抽出）をテストでは同期で行う
+    return app
 
 
 class Clock:

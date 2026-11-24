@@ -163,6 +163,10 @@ class App:
                                              + [{"stdin": s, "expected": v.outputs[s], "public": False} for s in hid])
             return self._judge[task.task_id]
 
+    def background(self, fn) -> None:
+        """応答を待たせない裏の処理（比較用の特徴抽出など）。テストでは同期実行に差し替える。"""
+        threading.Thread(target=fn, daemon=True).start()
+
     def llm_cost(self, model: str, usage: dict) -> float:
         prices = self.server_cfg.get("llm_prices", {})
         price = next((v for k, v in prices.items() if model == k or model.startswith(k + "-")), None)
@@ -282,7 +286,8 @@ class App:
                                      + (1 if s.engine.open is not None and s.engine.open.intervened else 0),
                     "support_active": s.support["support_type"] if s.support else None,
                     "busy": s.flow.locked(), "anomalies": len(s.engine.anomalies), "errors": s.errors,
-                    "questions": s.questions, "cost_usd": round(s.cost_usd, 3), "limits": sorted(s.limits_hit),
+                    "questions": s.questions, "cost_usd": round(s.cost_usd, 3),
+                    "shadow_cost_usd": round(s.shadow_cost_usd, 3), "limits": sorted(s.limits_hit),
                     "contaminated_cycles": sum(1 for c in s.engine.cycles if c.features.get("contamination_suspected")),
                     "states": [c.state for c in s.engine.cycles],
                 })
@@ -308,16 +313,55 @@ class App:
                 "allocation_file_hash": self.allocation_hash,
                 "participants": [{k: v for k, v in p.items() if k != "token"} for p in self.store.participants()],
             }, ensure_ascii=False, indent=2))
+            feat_rows: list[dict] = []
             for p in self.store.participants():
                 pid = p["participant_id"]
                 evs = self.store.events(pid)
                 path = os.path.join(tmp, f"{pid}_events.jsonl")
                 dump_jsonl(evs, path)
                 z.write(path, f"events/{pid}_events.jsonl")
+                feat_rows.extend(features_rows(pid, evs))
                 eng = replay(evs, self.engine_cfg)
                 for _k, fp in export(eng, os.path.join(tmp, "judgments"), pid).items():
                     z.write(fp, f"judgments/{os.path.basename(fp)}")
+            z.writestr("summary/features_compare.csv", _csv_text(FEATURE_COLS, feat_rows))
         return buf.getvalue()
+
+
+FEATURE_COLS = ["participant_id", "prompt_event_id", "task_id", "text"] + [
+    f"{side}_{k}" for side in ("main", "shadow") for k in
+    ("model", "prompt_version", "ok", "h1", "h2", "h3", "h4", "is_followup", "followup_confidence",
+     "asks_about_answer", "off_task", "latency_ms")]
+
+
+def features_rows(pid: str, evs) -> list[dict]:
+    """質問ごとに、判定に使ったモデルと比較用モデル（features_shadow）の特徴を並べる（人手ラベルとの比較用）。"""
+    calls = {e.event_id: e.payload for e in evs if e.type == "LLM_CALL"}
+    rows: dict[str, dict] = {}
+    for e in evs:
+        if e.type == "PROMPT_DRAFT_SUBMIT":
+            rows[e.event_id] = {"participant_id": pid, "prompt_event_id": e.event_id, "task_id": e.task_id,
+                                "text": e.payload.get("text", "")}
+        elif e.type in ("PROMPT_FEATURES", "PROMPT_FEATURES_SHADOW"):
+            r = rows.get(e.payload.get("prompt_event_id"))
+            if r is None:
+                continue
+            side = "main" if e.type == "PROMPT_FEATURES" else "shadow"
+            f = e.payload.get("features") or {}
+            call = calls.get(e.payload.get("llm_call_id"), {})
+            r.update({f"{side}_model": e.payload.get("model"), f"{side}_prompt_version": e.payload.get("prompt_version"),
+                      f"{side}_ok": e.payload.get("ok"), f"{side}_latency_ms": call.get("latency_ms"),
+                      **{f"{side}_{k}": f.get(k) for k in ("h1", "h2", "h3", "h4", "is_followup",
+                                                           "followup_confidence", "asks_about_answer", "off_task")}})
+    return list(rows.values())
+
+
+def _csv_text(cols: list[str], rows: list[dict]) -> str:
+    sio = io.StringIO()
+    w = csv.DictWriter(sio, fieldnames=cols, extrasaction="ignore")
+    w.writeheader()
+    w.writerows(rows)
+    return "\ufeff" + sio.getvalue()
 
 
 # ==================================================================== HTTP

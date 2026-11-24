@@ -96,6 +96,7 @@ class ParticipantSession:
         self.last_decision: Optional[dict] = None
         # LLM の利用量
         self.questions = 0
+        self.shadow_cost_usd = 0.0
         self.cost_usd = 0.0
         self.limits_hit: set[str] = set()
         self.version = 0                       # 画面の作り直しが必要な変化で増える
@@ -190,7 +191,11 @@ class ParticipantSession:
         elif typ == "PROMPT_DRAFT_SUBMIT":
             self.questions += 1
         elif typ == "LLM_CALL":
-            self.cost_usd += self.app.llm_cost(p.get("model", ""), p.get("usage") or {})
+            c = self.app.llm_cost(p.get("model", ""), p.get("usage") or {})
+            if p.get("purpose") == "features_shadow":
+                self.shadow_cost_usd += c      # 研究用の比較なので学習者の利用上限には数えない
+            else:
+                self.cost_usd += c
         elif typ == "LIMIT_REACHED":
             self.limits_hit.add(f'{p.get("action", "notify")}:{p.get("limit", "")}')
         elif typ in ("SANDBOX_ERROR", "AI_ERROR"):
@@ -719,6 +724,8 @@ class ParticipantSession:
         a = self.app
         res, fpayload = extract_features(a.llm, a.prompts["features"], task, prev, text,
                                          float(a.server_cfg["llm"]["features"]["timeout_s"]))
+        if "features_shadow" in a.server_cfg["llm"]:
+            a.background(lambda: self._shadow_features(task, prev, text, draft.event_id))
         with self.lock:
             call_id = self._llm_call("features", a.prompts["features"].version, res)
             self.emit("PROMPT_FEATURES", {"prompt_event_id": draft.event_id, "llm_call_id": call_id,
@@ -734,6 +741,21 @@ class ParticipantSession:
                                             "public": public, "key": key})
                 return {"stage": "pre_send_support"}
         return self._send_to_ai(draft.event_id, text, text, dec)
+
+    def _shadow_features(self, task, prev: str, text: str, prompt_event_id: str) -> None:
+        """比較用のモデルで同じ質問特徴を抽出して記録する（判定には使わない。エンジンはこのイベントを無視する）。"""
+        a = self.app
+        try:
+            res, payload = extract_features(a.llm, a.prompts["features"], task, prev, text,
+                                            float(a.server_cfg["llm"]["features_shadow"]["timeout_s"]), role="features_shadow")
+        except Exception as e:      # 裏の処理なので学習者の操作には影響させない
+            with self.lock:
+                self.emit("PROMPT_FEATURES_SHADOW", {"prompt_event_id": prompt_event_id, "ok": False,
+                                                     "error": f"exception:{type(e).__name__}"})
+            return
+        with self.lock:
+            call_id = self._llm_call("features_shadow", a.prompts["features"].version, res)
+            self.emit("PROMPT_FEATURES_SHADOW", {"prompt_event_id": prompt_event_id, "llm_call_id": call_id, **payload})
 
     def ai_blocked(self) -> bool:
         return any(k.startswith("block:") for k in self.limits_hit)

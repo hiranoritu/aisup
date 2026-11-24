@@ -45,7 +45,7 @@ def make_fake_llm(tasks: list[Task]) -> FuncLLM:
         if role == "chat":
             return ("（開発用の偽AIの応答です）次のように書けます。\n\n```c\n" + task.reference_solution.rstrip()
                     + "\n```\n\nポインタを使うと、関数の中から呼び出し元の変数を書き換えられます。")
-        if role == "features":
+        if role in ("features", "features_shadow"):
             m = re.search(r"学習者の質問: (.*)$", user, re.S)
             return json.dumps(_features(m.group(1) if m else user), ensure_ascii=False)
         if role == "grade":

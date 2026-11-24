@@ -26,6 +26,8 @@ DEFAULT_SERVER_CONFIG: dict[str, Any] = {
         "features": {"model": "", "params": {}, "timeout_s": 8, "response_format": {"type": "json_object"}},
         "support":  {"model": "", "params": {}, "timeout_s": 12, "response_format": {"type": "json_object"}},
         "grade":    {"model": "", "params": {}, "timeout_s": 12, "response_format": {"type": "json_object"}},
+        # 任意：features_shadow を置くと、同じ質問特徴の抽出をこのモデルでも裏で行い PROMPT_FEATURES_SHADOW に記録する
+        # （判定には使わない。予備実験でモデルを比べるため。2026-11-24 決定）
     },
     "openai_base_url": "https://api.openai.com/v1",
     "prompts": {

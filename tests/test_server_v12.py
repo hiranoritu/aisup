@@ -368,3 +368,41 @@ def test_session_end_makes_backup(tmp_path):
     import os
     backups = os.listdir(tmp_path / "backups")
     assert any(f.endswith(f"end_{s.pid}.sqlite3") for f in backups)
+
+
+def test_shadow_features_recorded_but_not_used(tmp_path):
+    script = Script()
+    shadow = {"model": "gpt-6.1-terra", "params": {}, "timeout_s": 8}
+    app = make_app(tmp_path, script, server_overrides={"llm": {"features_shadow": shadow}})
+    s = start(app, "adaptive")
+    script.features["q1"] = F(h2=1)
+    s.submit_prompt("q1")
+    sh = events_of(app, s, "PROMPT_FEATURES_SHADOW")
+    assert len(sh) == 1 and sh[0].payload["ok"] and sh[0].payload["features"]["h2"] == 1
+    calls = [e.payload["purpose"] for e in events_of(app, s, "LLM_CALL")]
+    assert "features_shadow" in calls and calls.count("features") == 1
+    # 判定・質問回数には影響しない
+    assert s.questions == 1 and len(s.engine.decisions) == 1
+    # 書き出しに両モデルの比較表
+    import io, zipfile, csv as _csv
+    z = zipfile.ZipFile(io.BytesIO(app.export_zip()))
+    rows = list(_csv.DictReader(io.StringIO(z.read("summary/features_compare.csv").decode("utf-8-sig"))))
+    r = next(r for r in rows if r["participant_id"] == s.pid)
+    assert r["text"] == "q1" and r["main_h2"] == "1" and r["shadow_h2"] == "1" and r["shadow_ok"] == "True"
+
+
+def test_shadow_failure_does_not_break_prompt(tmp_path):
+    script = Script()
+    script.fail_roles.add("features_shadow")
+    app = make_app(tmp_path, script, server_overrides={"llm": {"features_shadow": {"model": "x", "params": {}, "timeout_s": 8}}})
+    s = start(app, "adaptive")
+    r = s.submit_prompt("q1")
+    assert r["stage"] == "done"
+    assert events_of(app, s, "PROMPT_FEATURES_SHADOW")[0].payload["ok"] is False
+
+
+def test_production_config_uses_luna_with_terra_shadow():
+    import json as _json
+    cfg = _json.load(open("server_config.json", encoding="utf-8"))
+    assert cfg["llm"]["features"]["model"] == "gpt-6-luna"
+    assert cfg["llm"]["features_shadow"]["model"] == "gpt-6.1-terra"

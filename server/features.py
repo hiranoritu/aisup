@@ -13,10 +13,10 @@ from .tasks import Task
 
 
 def extract_features(llm: LLMClient, prompt: Prompt, task: Task, prev_response: str, text: str,
-                     timeout_s: float) -> tuple[LLMResult, dict[str, Any]]:
+                     timeout_s: float, role: str = "features") -> tuple[LLMResult, dict[str, Any]]:
     msgs = prompt.messages(task_title=task.title, prev_response_excerpt=(prev_response or "（なし）")[:400],
                            prompt_text=text)
-    res = llm.complete("features", msgs, json_mode=True, timeout_s=timeout_s)
+    res = llm.complete(role, msgs, json_mode=True, timeout_s=timeout_s)
     out: dict[str, Any] = {"model": res.model, "prompt_version": prompt.version, "raw": res.text}
     if not res.ok:
         out.update(ok=False, error="llm_failed:" + res.error)

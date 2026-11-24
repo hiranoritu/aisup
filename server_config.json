@@ -3,7 +3,8 @@
   "llm_provider": "openai",
   "llm": {
     "chat":     {"model": "gpt-6.2-sol",   "params": {"reasoning_effort": "low"},  "timeout_s": 60},
-    "features": {"model": "gpt-6.1-terra", "params": {"reasoning_effort": "none"}, "timeout_s": 8},
+    "features": {"model": "gpt-6-luna",    "params": {"reasoning_effort": "none"}, "timeout_s": 8},
+    "features_shadow": {"model": "gpt-6.1-terra", "params": {"reasoning_effort": "none"}, "timeout_s": 8},
     "support":  {"model": "gpt-6.1-terra", "params": {"reasoning_effort": "low"},  "timeout_s": 12},
     "grade":    {"model": "gpt-6.1-terra", "params": {"reasoning_effort": "low"},  "timeout_s": 12}
   }
