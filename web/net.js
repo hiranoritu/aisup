@@ -175,6 +175,11 @@ function selectedText(target) {
   const sel = document.getSelection();
   return sel ? sel.toString() : "";
 }
+// このページ内で始まったドラッグ（外部からのドロップと区別する）
+let pageDrag = false;
+document.addEventListener("dragstart", () => (pageDrag = true), true);
+document.addEventListener("dragend", () => (pageDrag = false), true);
+
 function pasteAllowed(text) {
   const t = normClip(text);
   return !t || recentClips.includes(t);
@@ -194,10 +199,15 @@ function guardPaste(ta, via) {
   ta.addEventListener("dragstart", () => (internalDrag = true));
   ta.addEventListener("dragend", () => (internalDrag = false));
   ta.addEventListener("drop", (e) => {
-    if (internalDrag) return;
+    if (internalDrag) return;                 // 同じ欄の中での移動
     const t = (e.dataTransfer && e.dataTransfer.getData("text/plain")) || "";
-    if (pasteAllowed(t) && t) return;
     e.preventDefault();
+    if (pageDrag) {
+      // このページの別の場所（AI 回答など）からのドラッグ：外部ではないので記録しないが、由来を追えないので受け付けない
+      pageDrag = false;
+      toast("ドラッグでは入れられません。コピーして貼り付けてください");
+      return;
+    }
     enqueue("PASTE_BLOCKED", { length: t.length, via: via + ":drop" });
     toast("このシステムの外からの貼り付けはできません");
   }, true);

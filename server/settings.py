@@ -71,7 +71,7 @@ DEFAULT_SERVER_CONFIG: dict[str, Any] = {
         {"id": "main", "kind": "tasks", "time_limit_s": 2700, "tasks": ["main_swap", "main_minmax", "main_count"]},
         {"id": "post", "kind": "tasks", "time_limit_s": 1500, "tasks": ["post_reverse", "post_divmod"]},
         {"id": "posttest", "kind": "test", "time_limit_s": 600, "instrument": "instruments/posttest.json"},
-        {"id": "questionnaire", "kind": "questionnaire", "time_limit_s": None,
+        {"id": "questionnaire", "kind": "questionnaire", "time_limit_s": 600,
          "instrument": "instruments/questionnaire.json"},
     ],
     "session": {

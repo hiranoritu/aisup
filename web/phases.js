@@ -195,10 +195,13 @@ function renderHeader(S) {
   const t = $("phase-timer");
   if (!ph || !ph.deadline_t || S.status !== "active") { t.textContent = ""; return; }
   const offset = Date.now() / 1000 - S.now_t;
+  let savedNearEnd = false;
   const tick = () => {
     const left = Math.max(0, Math.round(ph.deadline_t - (Date.now() / 1000 - offset)));
     t.textContent = `残り ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
     t.classList.toggle("low", left <= 120);
+    // テスト・質問紙は上限の直前に入力途中の回答を保存する（自動保存の待ち時間で最後の入力を失わないように）
+    if (left <= 3 && !savedNearEnd && !$("view-form").hidden) { savedNearEnd = true; saveForm(false); }
     if (left <= 0) { clearInterval(headerTimer); setTimeout(load, 2500); }   // サーバが次のフェーズへ進める
   };
   tick();

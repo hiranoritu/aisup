@@ -40,7 +40,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
 from engine import make_config
-from engine.config import load_config
+from engine.config import config_hash, load_config
 from engine.core import Engine
 from engine.events import Event, ordered
 
@@ -51,7 +51,8 @@ HS_LABELS = ("Passive", "Active", "Constructive")
 RU_LABELS = ("Passive", "Active", "Constructive")
 NA = "Undeterminable"          # 評価者が「判定不能」としたもの
 ALIASES = {"判定不能": NA, "判断できない": NA, "不明": NA}
-SHOWN_TYPES = {"PROMPT_DRAFT_SUBMIT", "AI_RESPONSE", "CODE_EDIT", "COMPILE", "RUN", "TASK_SUBMIT"}
+SHOWN_TYPES = {"PROMPT_DRAFT_SUBMIT", "AI_RESPONSE", "CODE_EDIT", "COMPILE", "RUN", "TASK_SUBMIT",
+               "CODE_SNAPSHOT"}   # スナップショットは表示せず、実行時のコードを正確にするためだけに使う
 
 
 @dataclass
@@ -206,6 +207,10 @@ def item_html(item_id: str, it: Item, task_text: str) -> str:
     for e in it.timeline:
         p = e.payload
         ts = f"<span class='t'>{_mmss(e.t - c.start_t)}</span>"
+        if e.type == "CODE_SNAPSHOT":
+            if isinstance(p.get("text"), str):
+                doc = p["text"]          # 実行の直前などに保存された実際のコード（編集の記録に欠けがあっても正しくなる）
+            continue
         if e.type == "CODE_EDIT":
             off, dl, ins = int(p.get("offset", -1)), int(p.get("delete_len", 0)), p.get("insert_text", "")
             if 0 <= off <= len(doc):
@@ -308,9 +313,21 @@ GUIDE = """# 記入の手引き（定義の部分は下書き：研究者が確�
 
 # ==================================================================== make
 def make(zip_path: str, out_dir: str, seed: int, phases: list[str], cfg: dict,
-         tasks_dir: str, include_notes: bool = False) -> dict:
+         tasks_dir: str, include_notes: bool = False, allow_config_mismatch: bool = False) -> dict:
     manifest, logs = read_zip(zip_path)
     notes = {p["participant_id"]: p.get("note", "") for p in manifest.get("participants", [])}
+    # 実験で使った判定エンジンの設定と同じでなければ作らない（システムの判定が本番と食い違うため）
+    want = config_hash(cfg)
+    used = {}
+    for pid, evs in logs.items():
+        ss = next((e for e in evs if e.type == "SESSION_START"), None)
+        if ss is not None:
+            used[pid] = (ss.payload.get("rule_version"), ss.payload.get("config_hash"))
+    mismatch = {pid: v for pid, v in used.items() if v[1] != want
+                and (include_notes or notes.get(pid) != "loadtest")}
+    if mismatch and not allow_config_mismatch:
+        raise ValueError(f"判定エンジンの設定が実験時と違います（今: {cfg['rule_version']} {want}）: "
+                         f"{dict(list(mismatch.items())[:5])}。実験時の設定を --engine-config で渡してください")
     items: list[Item] = []
     for pid in sorted(logs):
         if not include_notes and notes.get(pid) == "loadtest":
@@ -369,6 +386,7 @@ def make(zip_path: str, out_dir: str, seed: int, phases: list[str], cfg: dict,
     info = {"source_zip": os.path.basename(zip_path), "seed": seed, "phases": phases, "items": len(rows),
             "participants": len({r["participant_id"] for r in rows}), "rule_version": cfg["rule_version"],
             "export_rule_version": manifest.get("rule_version"),
+            "config_hash": want, "config_mismatch_participants": sorted(mismatch),
             "excluded_notes": [] if include_notes else ["loadtest"]}
     with open(os.path.join(kdir, "manifest.json"), "w", encoding="utf-8") as f:
         json.dump(info, f, ensure_ascii=False, indent=2)
@@ -596,6 +614,8 @@ def main(argv=None) -> None:
     m.add_argument("--engine-config", help="判定エンジンの設定（本番と同じもの。省略時は既定）")
     m.add_argument("--tasks-dir", default=abspath("tasks"))
     m.add_argument("--include-loadtest", action="store_true")
+    m.add_argument("--allow-config-mismatch", action="store_true",
+                   help="実験時と違う設定でも作る（規則を変えた再分析用。manifest に記録する）")
     d = sub.add_parser("disagree", help="評価者間の一致と、合議用の不一致一覧・gold_draft.csv を作る")
     d.add_argument("--dir", required=True, help="make の --out")
     d.add_argument("--labels", nargs="+", required=True, help="評価者ごとの記入済み label_sheet（ファイル名が評価者名）")
@@ -610,7 +630,7 @@ def main(argv=None) -> None:
             ap.error(f"{a.out} は空ではありません（上書きしない）")
         cfg = load_config(a.engine_config) if a.engine_config else make_config()
         info = make(a.zip, a.out, a.seed, [x.strip() for x in a.phases.split(",") if x.strip()], cfg,
-                    a.tasks_dir, a.include_loadtest)
+                    a.tasks_dir, a.include_loadtest, a.allow_config_mismatch)
         print(json.dumps(info, ensure_ascii=False, indent=2))
         print(f"評価者には {os.path.join(a.out, 'for_raters')} だけを渡してください（_key は渡さない）。")
     elif a.cmd == "disagree":

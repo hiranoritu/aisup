@@ -353,7 +353,11 @@ def test_llm_cost_from_usage(tmp_path):
     app = make_app(tmp_path, Script())
     assert app.llm_cost("gpt-6.2-sol", {"prompt_tokens": 1_000_000, "completion_tokens": 100_000}) == pytest.approx(3.0)
     assert app.llm_cost("gpt-6.1-terra-2026-11-01", {"prompt_tokens": 1_000_000}) == pytest.approx(1.0)
-    assert app.llm_cost("unknown", {"prompt_tokens": 5}) == 0.0
+    # 料金表にないモデルは最も高い料金で見積もり、一度だけ通知する（費用の上限が効かなくならないように）
+    assert app.llm_cost("gpt-7-new", {"prompt_tokens": 1_000_000}) == pytest.approx(8.0)
+    app.llm_cost("gpt-7-new", {"prompt_tokens": 1})
+    assert sum("gpt-7-new" in a["message"] for a in app.alerts) == 1
+    assert app.llm_cost("fake", {"prompt_tokens": 5}) == 0.0
 
 
 def test_session_end_makes_backup(tmp_path):

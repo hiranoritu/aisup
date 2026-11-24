@@ -199,3 +199,19 @@ def test_guide_and_sheet_offer_undeterminable(tmp_path, exported):
     guide = (out / "for_raters" / "guide.md").read_text(encoding="utf-8")
     assert "Undeterminable" in guide and "判定不能" in guide and "合議" in guide and "κ" in guide
     assert "Undeterminable" in (out / "for_raters" / "index.html").read_text(encoding="utf-8")
+
+
+def test_refuses_different_engine_config(tmp_path, exported):
+    zpath, _, _ = exported
+    other = make_config({"E_edit_rule": "any"})
+    with pytest.raises(ValueError):
+        make(str(zpath), str(tmp_path / "lab"), 7, ["main"], other, "tasks")
+    info = make(str(zpath), str(tmp_path / "lab2"), 7, ["main"], other, "tasks", allow_config_mismatch=True)
+    assert len(info["config_mismatch_participants"]) == 2
+
+
+def test_questionnaire_has_time_limit():
+    from server.settings import DEFAULT_SERVER_CONFIG as D
+    limits = {p["id"]: p["time_limit_s"] for p in D["phases"]}
+    assert limits == {"consent": None, "envcheck": None, "intro": 600, "pretest": 600, "main": 2700,
+                      "post": 1500, "posttest": 600, "questionnaire": 600}

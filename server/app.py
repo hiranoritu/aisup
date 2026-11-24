@@ -61,6 +61,7 @@ class App:
         self.server_cfg = server_cfg
         self.server_cfg_hash = server_config_hash(server_cfg)
         self.engine_cfg = engine_cfg or make_config()
+        self._unpriced_models: set[str] = set()
         # 構文解析器の版が設定と違えばここで止める（参加者を受け付けてから失敗しない）
         get_analyzer(self.engine_cfg["structure_analyzer"], self.engine_cfg.get("structure_analyzer_versions"))
         self.clock = clock
@@ -166,7 +167,13 @@ class App:
         prices = self.server_cfg.get("llm_prices", {})
         price = next((v for k, v in prices.items() if model == k or model.startswith(k + "-")), None)
         if price is None:
-            return 0.0
+            if model in ("", "fake", "scripted") or not prices:
+                return 0.0
+            # 料金表にないモデル：費用の上限が効かなくならないよう、表で最も高い料金で見積もり、一度だけ通知する
+            price = [max(v[0] for v in prices.values()), max(v[1] for v in prices.values())]
+            if model not in self._unpriced_models:
+                self._unpriced_models.add(model)
+                self.notify(f"料金表（llm_prices）にないモデル {model} が応答しました。最も高い料金で見積もっています")
         return (float(usage.get("prompt_tokens") or 0) * price[0]
                 + float(usage.get("completion_tokens") or 0) * price[1]) / 1_000_000
 

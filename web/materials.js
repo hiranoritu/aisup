@@ -131,4 +131,12 @@ const Materials = {
 };
 document.getElementById("mp-close").addEventListener("click", () => Materials.close());
 // ページを閉じる・読み直すときに開いたままなら閉じたと記録する（端末に保存され、次に開いたときに送られる）
-window.addEventListener("pagehide", () => Materials.close());
+window.addEventListener("pagehide", (e) => {
+  if (!Materials.openId) return;
+  const id = Materials.openId;
+  Materials.close();
+  if (e.persisted) Materials._restore = id;    // 戻る・進むでページがそのまま復元される場合に備える
+});
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted && Materials._restore) { const id = Materials._restore; Materials._restore = null; Materials.open(id); }
+});
