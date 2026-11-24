@@ -63,6 +63,7 @@ OpenAI の確認（モデル変更時も実行）：`OPENAI_API_KEY=... python -
 - 最初に開いてから24時間で無効。30分を超える中断は記録したうえで再開を認める（§13-10）。
 - 学習者用AI：`gpt-6.2-sol`、特徴抽出：`gpt-6-luna`、支援生成・記述採点：`gpt-6.1-terra`（§13-6）。日付付きの版がないため応答の `model` を毎回記録。
   予備実験では特徴抽出を `gpt-6.1-terra` でも裏で行い `PROMPT_FEATURES_SHADOW` に記録する（`llm.features_shadow`。判定には使わず、費用は学習者の利用上限に数えない）。
+  書き出しの `summary/support_by_group.csv`（群×支援の種類ごとに選ばれた・提示できた・実施不能の件数）と `summary/support_infeasible_by_group.csv`（群×実施不能の理由×種類の件数）。負荷試験の参加者は除く。
   書き出しの `summary/features_compare.csv` に質問ごとの両モデルの特徴を並べる。予備実験後に人手ラベルと両モデルを比べて本実験のモデルを確定し、本実験では `features_shadow` を外す（2026-11-24 決定）。
 - 参加者ごとの LLM 上限（`llm_limits`）：質問80回か約$2で実験者に通知、質問240回か約$6で学習者用 AI への質問を止める
   （画面に `block_message` を表示し、`LIMIT_REACHED action=block` を記録して実験者にも通知。課題・実行・提出は続けられる）。

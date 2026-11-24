@@ -406,3 +406,27 @@ def test_production_config_uses_luna_with_terra_shadow():
     cfg = _json.load(open("server_config.json", encoding="utf-8"))
     assert cfg["llm"]["features"]["model"] == "gpt-6-luna"
     assert cfg["llm"]["features_shadow"]["model"] == "gpt-6.1-terra"
+
+
+def test_export_counts_infeasible_reasons_by_group(tmp_path):
+    import io, zipfile, csv as _csv
+    script = Script()
+    script.support = lambda sysmsg, msgs: "これはJSONではない"        # 生成に失敗させる
+    app = make_app(tmp_path, script)
+    for group in ("adaptive", "uniform"):
+        s = start(app, group)
+        for k in range(4):
+            script.features[f"{group}{k}"] = F(h2=1)
+            s.check_synced(s.next_seq - 1)
+            s.submit_prompt(f"{group}{k}")
+            base = s.next_seq
+            s.client_events(paste_items(s, base), s.page_id)
+            s.run_code(s.engine.doc.text, "")
+    z = zipfile.ZipFile(io.BytesIO(app.export_zip()))
+    inf = list(_csv.DictReader(io.StringIO(z.read("summary/support_infeasible_by_group.csv").decode("utf-8-sig"))))
+    by = list(_csv.DictReader(io.StringIO(z.read("summary/support_by_group.csv").decode("utf-8-sig"))))
+    assert inf and all(r["reason"] == "json_parse_error" for r in inf)
+    assert {r["group"] for r in inf} == {"adaptive", "uniform"}
+    for r in by:
+        assert int(r["decided"]) == int(r["shown"]) + int(r["infeasible"])
+    assert sum(int(r["count"]) for r in inf) == sum(int(r["infeasible"]) for r in by)

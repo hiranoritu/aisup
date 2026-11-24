@@ -9,6 +9,7 @@ API キーはサーバの環境変数だけに置き、ブラウザには渡さ�
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import csv
 import hashlib
 import io
@@ -314,6 +315,8 @@ class App:
                 "participants": [{k: v for k, v in p.items() if k != "token"} for p in self.store.participants()],
             }, ensure_ascii=False, indent=2))
             feat_rows: list[dict] = []
+            sup_counts: Counter = Counter()
+            inf_counts: Counter = Counter()
             for p in self.store.participants():
                 pid = p["participant_id"]
                 evs = self.store.events(pid)
@@ -321,10 +324,24 @@ class App:
                 dump_jsonl(evs, path)
                 z.write(path, f"events/{pid}_events.jsonl")
                 feat_rows.extend(features_rows(pid, evs))
+                if p.get("note") != "loadtest":
+                    count_support(p["group"], evs, sup_counts, inf_counts)
                 eng = replay(evs, self.engine_cfg)
                 for _k, fp in export(eng, os.path.join(tmp, "judgments"), pid).items():
                     z.write(fp, f"judgments/{os.path.basename(fp)}")
             z.writestr("summary/features_compare.csv", _csv_text(FEATURE_COLS, feat_rows))
+            # 群別の支援の結果と、実施不能の理由ごとの件数（負荷試験の参加者は除く）
+            rows = []
+            for (g, st) in sorted({k[:2] for k in sup_counts}):
+                dec, shown, inf = (sup_counts[(g, st, o)] for o in ("decided", "shown", "infeasible"))
+                rows.append({"group": g, "support_type": st, "decided": dec, "shown": shown, "infeasible": inf,
+                             "infeasible_rate": round(inf / dec, 3) if dec else ""})
+            z.writestr("summary/support_by_group.csv",
+                       _csv_text(["group", "support_type", "decided", "shown", "infeasible", "infeasible_rate"], rows))
+            z.writestr("summary/support_infeasible_by_group.csv", _csv_text(
+                ["group", "reason", "support_type", "count"],
+                [{"group": g, "reason": r, "support_type": st, "count": n}
+                 for (g, r, st), n in sorted(inf_counts.items())]))
         return buf.getvalue()
 
 
@@ -354,6 +371,19 @@ def features_rows(pid: str, evs) -> list[dict]:
                       **{f"{side}_{k}": f.get(k) for k in ("h1", "h2", "h3", "h4", "is_followup",
                                                            "followup_confidence", "asks_about_answer", "off_task")}})
     return list(rows.values())
+
+
+def count_support(group: str, evs, sup: Counter, inf: Counter) -> None:
+    """介入判断で支援が選ばれた回数・提示できた回数・実施不能の回数（理由別）を群ごとに数える。"""
+    for e in evs:
+        p = e.payload
+        if e.type == "DECISION" and p.get("support_type"):
+            sup[(group, p["support_type"], "decided")] += 1
+        elif e.type == "SUPPORT_SHOWN":
+            sup[(group, p.get("support_type"), "shown")] += 1
+        elif e.type == "SUPPORT_INFEASIBLE":
+            sup[(group, p.get("support_type"), "infeasible")] += 1
+            inf[(group, p.get("reason") or "unknown", p.get("support_type"))] += 1
 
 
 def _csv_text(cols: list[str], rows: list[dict]) -> str:
